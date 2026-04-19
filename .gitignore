@@ -1,0 +1,17 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+
+# Scratch outputs from experiments
+experiments/*.log
+experiments/out/
+
+# Editor / IDE
+*~
+*.swp
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db

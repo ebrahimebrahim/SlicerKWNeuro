@@ -1,0 +1,2 @@
+# Runtime Python dependencies installed on demand from the KWNeuroEnvironment widget.
+# Phase 0: empty — the environment panel and its install flow are Phase 1 work.
