@@ -10,4 +10,4 @@ xeus-python / cppzmq incompatibility — see the Phase 0 findings).
 Phase 1.5 fixes SlicerJupyter on Linux, at which point runnable
 notebooks for the bridge's workflows will land here. Until then, the
 same content ships as a hand-written walkthrough at
-`docs/tutorials/example-pipeline.md`.
+`docs/tutorials/dmri-pipeline-walkthrough.md`.

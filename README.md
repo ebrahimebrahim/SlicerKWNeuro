@@ -16,7 +16,7 @@ Phases:
 - **Phase 0** (complete) — scaffold, install probes, coordinate-system
   correctness checks. Findings in `phase-0-findings.md`.
 - **Phase 1** (now) — `KWNeuroEnvironment` panel + four bridge classes
-  + docs + hand-written example-pipeline tutorial.
+  + docs + a hand-written DMRI pipeline walkthrough tutorial.
 - **Phase 1.5** (after Phase 1) — fix `SlicerJupyter` so the bridge
   works from a Slicer-backed Jupyter kernel. Runnable notebook
   versions of the tutorials land then.
@@ -113,10 +113,12 @@ ctest -N
 
 ## Building the docs
 
+Install the bridge with its `docs` extra (one-time setup; picks up
+sphinx + sphinx-autoapi + myst_parser + sphinx_copybutton + furo),
+then invoke sphinx:
+
 ```sh
-~/slicer-superbuild-v5.11/python-install/bin/PythonSlicer -m pip install \
-  'sphinx>=7.0' 'sphinx-autoapi>=3.0' 'myst_parser>=0.13' sphinx_copybutton \
-  'furo>=2023.08.17'
+~/slicer-superbuild-v5.11/python-install/bin/PythonSlicer -m pip install --no-deps -e './kwneuro_slicer_bridge[docs]'
 ~/slicer-superbuild-v5.11/python-install/bin/PythonSlicer -m sphinx -n -T docs docs/_build/html
 ```
 
