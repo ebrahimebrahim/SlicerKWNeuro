@@ -6,21 +6,135 @@
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>325</width>
-    <height>200</height>
+    <width>440</width>
+    <height>500</height>
    </rect>
   </property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
-    <widget class="QLabel" name="placeholderLabel">
+    <widget class="ctkCollapsibleButton" name="statusCollapsibleButton">
      <property name="text">
-      <string>KWNeuro Environment panel — coming in Phase 1.
-
-This scaffold is Phase 0 groundwork. The panel will eventually show kwneuro install status, manage optional extras, and run a smoke test.</string>
+      <string>Status</string>
      </property>
-     <property name="wordWrap">
-      <bool>true</bool>
+     <layout class="QVBoxLayout" name="statusLayout">
+      <item>
+       <layout class="QFormLayout" name="versionsFormLayout">
+        <item row="0" column="0">
+         <widget class="QLabel" name="kwneuroVersionCaption">
+          <property name="text">
+           <string>kwneuro:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="0" column="1">
+         <widget class="QLabel" name="kwneuroVersionLabel">
+          <property name="text">
+           <string>(not installed)</string>
+          </property>
+          <property name="textInteractionFlags">
+           <set>Qt::TextSelectableByMouse</set>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="0">
+         <widget class="QLabel" name="bridgeVersionCaption">
+          <property name="text">
+           <string>kwneuro_slicer_bridge:</string>
+          </property>
+         </widget>
+        </item>
+        <item row="1" column="1">
+         <widget class="QLabel" name="bridgeVersionLabel">
+          <property name="text">
+           <string>(not installed)</string>
+          </property>
+          <property name="textInteractionFlags">
+           <set>Qt::TextSelectableByMouse</set>
+          </property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <widget class="QGroupBox" name="extrasGroupBox">
+        <property name="title">
+         <string>Optional extras</string>
+        </property>
+        <layout class="QVBoxLayout" name="extrasLayout">
+         <item>
+          <widget class="QCheckBox" name="extra_hdbet_CheckBox">
+           <property name="text">
+            <string>hdbet — HD-BET brain extraction (adds torch, nnunetv2; several GB)</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QCheckBox" name="extra_noddi_CheckBox">
+           <property name="text">
+            <string>noddi — NODDI microstructure via AMICO</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QCheckBox" name="extra_tractseg_CheckBox">
+           <property name="text">
+            <string>tractseg — white-matter tract segmentation (fury pruned to preserve Slicer VTK)</string>
+           </property>
+          </widget>
+         </item>
+         <item>
+          <widget class="QCheckBox" name="extra_combat_CheckBox">
+           <property name="text">
+            <string>combat — neuroCombat multi-site harmonisation</string>
+           </property>
+          </widget>
+         </item>
+        </layout>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="installBridgeButton">
+        <property name="text">
+         <string>Install / Update kwneuro + bridge</string>
+        </property>
+        <property name="toolTip">
+         <string>pip-installs kwneuro_slicer_bridge from this extension; the bridge's pyproject.toml also pulls in kwneuro from its pinned git ref. Also re-runs whenever extras toggles above change their install state.</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="ctkCollapsibleButton" name="verificationCollapsibleButton">
+     <property name="text">
+      <string>Verification</string>
      </property>
+     <layout class="QVBoxLayout" name="verificationLayout">
+      <item>
+       <widget class="QPushButton" name="verifySetupButton">
+        <property name="text">
+         <string>Verify setup</string>
+        </property>
+        <property name="toolTip">
+         <string>Imports kwneuro and kwneuro_slicer_bridge, then pushes a small synthetic 3D volume through InSceneVolumeResource and verifies its array and affine round-trip correctly. A failure here means one of those three steps did not work — typically because kwneuro or the bridge is not installed, or an import failed; re-run Install / Update above or check the console for the specific error.</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QLabel" name="verifySetupResultLabel">
+        <property name="text">
+         <string>(not run)</string>
+        </property>
+        <property name="textInteractionFlags">
+         <set>Qt::TextSelectableByMouse</set>
+        </property>
+        <property name="wordWrap">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
     </widget>
    </item>
    <item>
@@ -43,6 +157,12 @@ This scaffold is Phase 0 groundwork. The panel will eventually show kwneuro inst
    <class>qMRMLWidget</class>
    <extends>QWidget</extends>
    <header>qMRMLWidget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ctkCollapsibleButton</class>
+   <extends>QWidget</extends>
+   <header>ctkCollapsibleButton.h</header>
    <container>1</container>
   </customwidget>
  </customwidgets>

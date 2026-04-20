@@ -1,9 +1,13 @@
-# KWNeuro example notebooks
+# Notebooks — placeholder
 
-Placeholder directory. Real notebooks land in Phase 1:
+Deliberately empty in Phase 1. A runnable notebook requires a Jupyter
+kernel that lives inside a running 3D Slicer (so `slicer.mrmlScene`,
+the bridge classes, and MRML nodes all resolve). The only such kernel
+is [SlicerJupyter](https://github.com/Slicer/SlicerJupyter), which is
+currently broken against Slicer 5.9+ (known Python-3.12 /
+xeus-python / cppzmq incompatibility — see the Phase 0 findings).
 
-- A Slicer Python interactor walkthrough using the bridge `Resource` classes.
-- If Phase 1.5 goes ahead, a SlicerJupyter notebook using the same bridge
-  classes against a live Slicer scene.
-
-Phase 0 delivers only scaffolding; nothing here to run yet.
+Phase 1.5 fixes SlicerJupyter on Linux, at which point runnable
+notebooks for the bridge's workflows will land here. Until then, the
+same content ships as a hand-written walkthrough at
+`docs/tutorials/example-pipeline.md`.

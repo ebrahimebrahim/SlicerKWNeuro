@@ -29,12 +29,12 @@ non-sample volume could plausibly take 5-15 minutes for denoise.
 | kwneuro stage | Algorithm | Expected wall-clock on typical data | Sync acceptable? |
 |---------------|-----------|------------------------------------|------------------|
 | `denoise_dwi` | DIPY Patch2Self | 1-10 min | **No** |
-| `Dti.estimate_from_dwi` | DIPY TensorModel | 5-30 s | Borderline |
+| `Dti.estimate_dti` | DIPY TensorModel | 5-30 s | Borderline |
 | `estimate_response_function` | DIPY SSST | 5-20 s | Yes |
 | `compute_csd_peaks` | DIPY CSD | 20-120 s | **No** |
 | `harmonize_volumes` | neuroCombat | 5-30 s | Yes |
 | `brain_extract_batch` | HD-BET (NN) | 1-3 min/subject + init | **No** |
-| `Noddi.estimate_from_dwi` | AMICO | 2-10 min | **No** |
+| `Noddi.estimate_noddi` | AMICO | 2-10 min | **No** |
 | `extract_tractseg` | TractSeg (NN) | 2-10 min | **No** |
 | `register_volumes` (SyN) | ANTs SyN | 5-30 min | **No** |
 | `build_template` | iterative groupwise | 20 min - 2 h | **No** |
@@ -65,7 +65,7 @@ correctly — but the benefits are large for the really heavy stages:
 Slicer can cancel the job, shows progress natively, and there is zero UI
 freeze regardless of the work done in Python.
 
-Best fit: **`extract_tractseg`**, **`Noddi.estimate_from_dwi`**,
+Best fit: **`extract_tractseg`**, **`Noddi.estimate_noddi`**,
 **`register_volumes`** (SyN), **`build_template`**, **`brain_extract_batch`**.
 The wall-clock cost justifies the shim.
 
@@ -82,7 +82,7 @@ the main process. The kwneuro function runs in the same Python
 interpreter — meaning any segfault or OOM takes Slicer down.
 
 Best fit: **`denoise_dwi`**, **`compute_csd_peaks`**,
-**`Dti.estimate_from_dwi`** (if anyone ever wants responsiveness during
+**`Dti.estimate_dti`** (if anyone ever wants responsiveness during
 the 5-30 s fit). Medium-length ops where a CLI shim would be overkill.
 
 ### 3. Synchronous Python call inside the Widget button
@@ -99,12 +99,12 @@ Best fit: **`estimate_response_function`**, **`harmonize_volumes`**.
 | kwneuro stage | Phase 2 shape | Notes |
 |---------------|---------------|-------|
 | `denoise_dwi` | QThread | Medium-length; emit Patch2Self tqdm progress via signal; the existing dipy progress bar is exactly what we want to route to Slicer's status bar. |
-| `Dti.estimate_from_dwi` | QThread or sync | Probably fast enough for sync; QThread if we want a uniform pattern across all pipeline modules. |
+| `Dti.estimate_dti` | QThread or sync | Probably fast enough for sync; QThread if we want a uniform pattern across all pipeline modules. |
 | `estimate_response_function` | Sync | <30 s, simple. |
 | `compute_csd_peaks` | QThread | Medium-length. |
 | `harmonize_volumes` | Sync with busy cursor | Quick, no I/O. |
 | `brain_extract_batch` | CLI module | HD-BET init is expensive; batch amortises — expose as "run on N subjects" CLI with progress per subject. |
-| `Noddi.estimate_from_dwi` | CLI module | AMICO writes to tmpdir; process isolation is valuable. |
+| `Noddi.estimate_noddi` | CLI module | AMICO writes to tmpdir; process isolation is valuable. |
 | `extract_tractseg` | CLI module | Deep learning; long; benefits from cancellation. |
 | `register_volumes` (SyN) | CLI module | Longest single-pair op; ANTs has its own progress. |
 | `build_template` | CLI module | Multi-hour; must have cancel. |

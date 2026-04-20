@@ -168,8 +168,8 @@ Phase 2 per-stage recommendation (short version):
 | Stage | Recommended invocation |
 |-------|------------------------|
 | `denoise_dwi`, `compute_csd_peaks` | **QThread** |
-| `estimate_response_function`, `harmonize_volumes`, `Dti.estimate_from_dwi` | **Sync with busy cursor** |
-| `brain_extract_batch`, `Noddi.estimate_from_dwi`, `extract_tractseg`, `register_volumes` (SyN), `build_template` | **CLI module shim** — wall-clock and cancellation justify the shim cost |
+| `estimate_response_function`, `harmonize_volumes`, `Dti.estimate_dti` | **Sync with busy cursor** |
+| `brain_extract_batch`, `Noddi.estimate_noddi`, `extract_tractseg`, `register_volumes` (SyN), `build_template` | **CLI module shim** — wall-clock and cancellation justify the shim cost |
 
 A `TqdmToSlicerStatus` adapter that forwards dipy/kwneuro `tqdm` progress
 to `slicer.util.showStatusMessage` should be built once and reused

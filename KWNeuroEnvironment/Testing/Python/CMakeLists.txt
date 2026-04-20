@@ -1,2 +1,5 @@
-
-#slicer_add_python_unittest(SCRIPT ${MODULE_NAME}ModuleTest.py)
+slicer_add_python_unittest(SCRIPT test_bridge_volume_roundtrip.py)
+slicer_add_python_unittest(SCRIPT test_bridge_dwi_roundtrip.py)
+slicer_add_python_unittest(SCRIPT test_bridge_dti_roundtrip.py)
+slicer_add_python_unittest(SCRIPT test_bridge_transform_roundtrip.py)
+slicer_add_python_unittest(SCRIPT test_env_panel_smoke.py)

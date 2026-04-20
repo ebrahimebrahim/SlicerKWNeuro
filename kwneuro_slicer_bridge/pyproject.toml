@@ -1,0 +1,63 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+
+[project]
+name = "kwneuro_slicer_bridge"
+authors = [
+  { name = "Ebrahim Ebrahim", email = "ebrahim.ebrahim@kitware.com" },
+]
+description = "Bridge exposing kwneuro resources as 3D Slicer MRML nodes"
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10,<3.14"
+classifiers = [
+  "Development Status :: 3 - Alpha",
+  "Intended Audience :: Science/Research",
+  "Intended Audience :: Developers",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3 :: Only",
+  "Programming Language :: Python :: 3.10",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Scientific/Engineering",
+  "Typing :: Typed",
+]
+version = "0.0.1"
+dependencies = [
+  # Pinned to the head of the `allow-custom-metadata` draft PR
+  # (KitwareMedical/kwneuro#137). This PR teaches `update_volume_metadata`
+  # to preserve non-NIfTI keys, which the bridge relies on. Once the PR
+  # merges to kwneuro's main branch, flip this pin back to `@main`.
+  "kwneuro @ git+https://github.com/KitwareMedical/kwneuro@4702266fe7e0a76c63c27b3677badbe0a96dcae7",
+  "numpy",
+  # vtk and slicer intentionally not declared — they come from 3D Slicer's
+  # bundled Python environment. Importing this package outside Slicer will
+  # fail, which is the intended behaviour.
+]
+
+
+[project.optional-dependencies]
+test = [
+  "pytest >= 6",
+]
+docs = [
+  "sphinx>=7.0",
+  "sphinx-autobuild==2024.10.3",
+  "sphinx-autoapi>=3.0",
+  "myst_parser>=0.13",
+  "sphinx_copybutton",
+  "furo>=2023.08.17",
+]
+
+
+[project.urls]
+Homepage = "https://github.com/KitwareMedical/kwneuro"
+
+
+[tool.setuptools.packages.find]
+where = ["src"]
