@@ -40,80 +40,76 @@ Phases:
 
 ## Running tests
 
-Prerequisites: a Slicer build (these instructions assume
-`~/slicer-superbuild-v5.11/`; substitute your own path). The
-`kwneuro_slicer_bridge` package must be installed into Slicer's Python
-before the bridge tests can pass — open the `KWNeuroEnvironment`
-module's env panel and click **Install / Update**, or do it from a
-terminal:
+Tests are registered via `slicer_add_python_unittest(...)` in
+`KWNeuroEnvironment/Testing/Python/CMakeLists.txt` and run through
+CTest against a Slicer build. The instructions below assume a Slicer
+superbuild at `~/slicer-superbuild-v5.11/`; substitute your own path.
+
+### Prerequisites
+
+Pip-install the bridge package into Slicer's Python so the bridge
+tests have something to import:
 
 ```sh
 ~/slicer-superbuild-v5.11/python-install/bin/PythonSlicer -m pip install --no-deps -e kwneuro_slicer_bridge
 ```
 
-The `--no-deps` flag preserves whatever `kwneuro` you have installed
-locally (useful during development when you're iterating on both repos
-in lockstep). Drop `--no-deps` the first time to let pip pull kwneuro
-from the branch pinned in `kwneuro_slicer_bridge/pyproject.toml`.
+The `--no-deps` flag preserves whatever `kwneuro` is already installed
+(useful when you're iterating on both repos in lockstep). Drop
+`--no-deps` the first time to let pip pull `kwneuro` from the git ref
+pinned in `kwneuro_slicer_bridge/pyproject.toml`.
 
-### Run a single test
+### Configure + build the extension once
 
 ```sh
-~/slicer-superbuild-v5.11/Slicer-build/Slicer \
-  --no-main-window --no-splash --testing \
-  --additional-module-paths $(pwd)/KWNeuroEnvironment \
-  --python-code "import slicer.testing; \
-    slicer.testing.runUnitTest(['$(pwd)/KWNeuroEnvironment/Testing/Python'], \
-                               'test_bridge_volume_roundtrip')"
+mkdir -p /tmp/kwneuro-extn-build && cd /tmp/kwneuro-extn-build
+cmake -DSlicer_DIR=$HOME/slicer-superbuild-v5.11/Slicer-build $OLDPWD
+cmake --build .
 ```
 
-Swap in any of the test-file basenames from
-`KWNeuroEnvironment/Testing/Python/`:
+The build step copies the scripted-module sources into a per-build
+`lib/Slicer-5.11/qt-scripted-modules/` tree where CTest finds them. Re-
+run `cmake --build .` after editing any source under
+`KWNeuroEnvironment/`. Changes in `kwneuro_slicer_bridge/` don't need
+a rebuild — the pip install is editable.
 
-- `test_bridge_volume_roundtrip`
-- `test_bridge_dwi_roundtrip`
-- `test_bridge_dti_roundtrip`
-- `test_bridge_transform_roundtrip`
-- `test_env_panel_smoke`
-
-### Run the whole suite
+### Run the suite
 
 ```sh
-for t in test_bridge_volume_roundtrip test_bridge_dwi_roundtrip \
-         test_bridge_dti_roundtrip test_bridge_transform_roundtrip \
-         test_env_panel_smoke; do
-  echo "=== $t ==="
-  ~/slicer-superbuild-v5.11/Slicer-build/Slicer \
-    --no-main-window --no-splash --testing \
-    --additional-module-paths $(pwd)/KWNeuroEnvironment \
-    --python-code "import slicer.testing; \
-      slicer.testing.runUnitTest(['$(pwd)/KWNeuroEnvironment/Testing/Python'], '$t')"
-done
+cd /tmp/kwneuro-extn-build
+ctest -j$(nproc) --output-on-failure --no-tests=error
 ```
 
-### Run the in-module `KWNeuroEnvironmentTest`
+Expected output: `100% tests passed, 0 tests failed out of 7` (five
+bridge round-trip tests, the env-panel smoke, plus an automatically-
+added generic module-loads test from the `WITH_GENERIC_TESTS` flag).
+
+### Run one test by name
 
 ```sh
-~/slicer-superbuild-v5.11/Slicer-build/Slicer \
-  --no-main-window --no-splash --testing \
-  --additional-module-paths $(pwd)/KWNeuroEnvironment \
-  --python-code "import slicer.testing; \
-    slicer.testing.runUnitTest(['$(pwd)/KWNeuroEnvironment'], 'KWNeuroEnvironment')"
+ctest -R py_test_bridge_volume_roundtrip --no-tests=error --output-on-failure
+```
+
+`--no-tests=error` is important: without it, a typo'd regex matching
+zero tests prints "No tests were found!!!" but exits 0 — a silently-
+passing typo. List available tests first:
+
+```sh
+ctest -N
 ```
 
 ### Notes
 
-- Headless Slicer does not auto-exit on exception; scripted tests use
-  `slicer.app.exit(...)` explicitly. Hangs generally mean a test
-  script raised before reaching the exit call.
-- A few tests depend on sample data cached by DIPY:
-  `test_bridge_dwi_roundtrip.py`'s 4D-shape check uses the Sherbrooke
-  3-shell DWI. Populate the cache by running
-  `PythonSlicer -c "from dipy.data import fetch_sherbrooke_3shell; fetch_sherbrooke_3shell()"`
-  once; subsequent runs use the local copy.
-- CI is not set up yet (per Phase 0 decision — CI comes around
-  Extension Index submission). Run tests manually while iterating on
-  Phase 1 / 2.
+- Sample-data prerequisite: `test_bridge_dwi_roundtrip.py`'s
+  4D-shape check uses the Sherbrooke 3-shell DWI. Populate the DIPY
+  cache once with:
+  ```sh
+  ~/slicer-superbuild-v5.11/python-install/bin/PythonSlicer \
+    -c "from dipy.data import fetch_sherbrooke_3shell; fetch_sherbrooke_3shell()"
+  ```
+- No GitHub-Actions-style CI yet (per Phase 0 decision — CI lands
+  around Extension Index submission). Run `ctest` manually while
+  iterating on Phase 1 / 2.
 
 ## Building the docs
 
