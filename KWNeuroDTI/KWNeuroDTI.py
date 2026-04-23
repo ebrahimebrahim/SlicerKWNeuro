@@ -58,6 +58,52 @@ class KWNeuroDTI(ScriptedLoadableModule):
 #
 
 
+def _warn_if_segmentation_geometry_differs(
+    seg_node: Any,
+    reference_dwi_node: Any,
+) -> None:
+    """Log a warning if the segmentation's source geometry doesn't match the DWI.
+
+    ``slicer.util.arrayFromSegmentBinaryLabelmap`` silently resamples
+    the segment into the reference geometry. If the segmentation was
+    drawn on a completely different volume (e.g. a T1 in a different
+    session) and the user passes an unrelated DWI as the reference,
+    the returned mask is a resampled approximation that may have no
+    spatial correspondence with the DWI. Detecting this at least
+    surfaces it in the application log so the user doesn't chase a
+    silent correctness bug.
+    """
+    import numpy as np
+
+    import slicer
+    import vtk
+
+    ref_role = slicer.vtkMRMLSegmentationNode.GetReferenceImageGeometryReferenceRole()
+    seg_source = seg_node.GetNodeReference(ref_role)
+    if seg_source is None:
+        return  # Segmentation has no source geometry to compare against.
+
+    dwi_matrix = vtk.vtkMatrix4x4()
+    reference_dwi_node.GetIJKToRASMatrix(dwi_matrix)
+    src_matrix = vtk.vtkMatrix4x4()
+    seg_source.GetIJKToRASMatrix(src_matrix)
+
+    dwi_affine = np.array(
+        [[dwi_matrix.GetElement(i, j) for j in range(4)] for i in range(4)],
+    )
+    src_affine = np.array(
+        [[src_matrix.GetElement(i, j) for j in range(4)] for i in range(4)],
+    )
+
+    if not np.allclose(dwi_affine, src_affine, atol=1e-4):
+        logging.warning(
+            "KWNeuroDTI: segmentation %r was drawn on %r whose IJK-to-RAS "
+            "differs from the DWI %r. The segment will be resampled onto "
+            "the DWI grid — check that they share a coordinate frame.",
+            seg_node.GetName(), seg_source.GetName(), reference_dwi_node.GetName(),
+        )
+
+
 def _extract_mask_resource(
     mask_node: Any | None,
     segment_id: str | None,
@@ -98,6 +144,8 @@ def _extract_mask_resource(
                 "Pick a segment in the module UI, or pass segment_id explicitly."
             )
             raise ValueError(msg)
+
+        _warn_if_segmentation_geometry_differs(mask_node, reference_dwi_node)
 
         kji = slicer.util.arrayFromSegmentBinaryLabelmap(
             mask_node, segment_id, reference_dwi_node,
@@ -160,19 +208,27 @@ class KWNeuroDTILogic(ScriptedLoadableModuleLogic):
     ) -> tuple[Any, Any, str]:
         """Resolve MRML nodes into kwneuro resources. **Main thread only.**
 
-        Returns ``(dwi_resource, mask_resource, dwi_name)``. The DWI is
-        an :class:`InSceneDwi` (which is a :class:`kwneuro.dwi.Dwi`);
-        the mask is a :class:`VolumeResource` or ``None``.
+        Returns ``(dwi_resource, mask_resource, dwi_name)``. Both are
+        fully materialised in main-thread memory — the DWI is a plain
+        ``kwneuro.Dwi`` (not an :class:`InSceneDwi`, whose live
+        ``InSceneVolumeResource`` would read ``node.GetImageData()`` on
+        whichever thread later calls ``get_array()``), and the mask is
+        either ``None`` or an ``InMemoryVolumeResource``. This guarantees
+        the downstream worker thread touches only pure-numpy data.
         """
-        from kwneuro_slicer_bridge import InSceneDwi
+        from kwneuro_slicer_bridge import InSceneDwi, InSceneVolumeResource
 
         if dwi_node is None:
             msg = "Input DWI node is required."
             raise ValueError(msg)
 
         dwi_name = dwi_node.GetName() or "kwneuro_dwi"
-        dwi = InSceneDwi.from_node(dwi_node)
+        dwi = InSceneDwi.from_node(dwi_node).to_in_memory()
+
         mask = _extract_mask_resource(mask_node, segment_id, dwi_node)
+        if isinstance(mask, InSceneVolumeResource):
+            mask = mask.to_in_memory()
+
         return dwi, mask, dwi_name
 
     def run_estimation(
@@ -311,7 +367,10 @@ class KWNeuroDTIWidget(ScriptedLoadableModuleWidget):
             if idx < 0:
                 slicer.util.errorDisplay(_("Pick a segment to use as the mask."))
                 return
-            segment_id = self.ui.segmentIdSelector.itemData(idx)
+            # PythonQt occasionally returns itemData as a QVariant
+            # wrapper on some builds; force to str so the downstream
+            # arrayFromSegmentBinaryLabelmap call gets a plain string.
+            segment_id = str(self.ui.segmentIdSelector.itemData(idx))
 
         with slicer.util.tryWithErrorDisplay(_("Failed to fit DTI."), waitCursor=False):
             # Main thread: resolve inputs (includes any temp-node

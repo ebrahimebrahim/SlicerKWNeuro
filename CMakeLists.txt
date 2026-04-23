@@ -20,6 +20,7 @@ include(${Slicer_USE_FILE})
 # Extension modules
 add_subdirectory(KWNeuroEnvironment)
 add_subdirectory(KWNeuroDTI)
+add_subdirectory(KWNeuroDenoise)
 ## NEXT_MODULE
 
 #-----------------------------------------------------------------------------

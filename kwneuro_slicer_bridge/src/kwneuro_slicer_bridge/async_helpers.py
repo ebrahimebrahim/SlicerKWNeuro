@@ -29,6 +29,8 @@ another thread is not supported and will produce Qt
 """
 from __future__ import annotations
 
+import importlib
+import logging
 import queue
 import threading
 import traceback
@@ -38,6 +40,22 @@ from typing import Any, Callable, TypeVar
 T = TypeVar("T")
 
 _POLL_INTERVAL_MS = 50
+
+# Global lock guarding TqdmToProgressDialog's monkey-patch of dipy's
+# per-submodule tqdm bindings. The patch mutates module-level state
+# (sys.modules[...].tqdm), so two concurrent contexts would clobber
+# each other's "original" bookkeeping. We enforce one-at-a-time and
+# raise rather than silently leaking.
+_TQDM_PATCH_LOCK = threading.Lock()
+
+# Modules that rebind `tqdm` via `from tqdm import tqdm` and that we want
+# to capture progress from. Dipy's pattern is universal but bindings are
+# per-submodule, so we have to list each one. Milestone B adds the
+# patch2self binding for denoise; extend here as future modules come
+# online (NODDI, CSD, TractSeg, etc.).
+_TQDM_REBINDINGS: tuple[tuple[str, str], ...] = (
+    ("dipy.denoise.patch2self", "tqdm"),
+)
 
 
 @dataclass
@@ -71,6 +89,7 @@ def run_in_worker(
     *,
     on_complete: Callable[[T | None, BaseException | None], None],
     on_progress: Callable[[str], None] | None = None,
+    progress_queue: queue.Queue | None = None,
 ) -> WorkerHandle:
     """Run ``fn`` on a background thread; marshal callbacks to the main Qt thread.
 
@@ -78,9 +97,13 @@ def run_in_worker(
     bind arguments). ``on_complete(result, exception)`` fires exactly
     once after ``fn`` returns or raises; exactly one of ``result`` or
     ``exception`` is not None. ``on_progress(line)`` fires zero or more
-    times as lines are pushed into the returned handle's
-    ``progress_queue`` — the worker side is responsible for populating
-    it (e.g. via a ``TqdmToProgressDialog`` shim in Milestone B).
+    times as lines are pushed into the handle's ``progress_queue`` — the
+    worker side is responsible for populating it (e.g. via a
+    ``TqdmToProgressDialog`` shim).
+
+    ``progress_queue`` allows the caller to pre-build the queue (so it
+    can be referenced from inside ``fn`` without racing thread start).
+    If omitted, a fresh queue is created and stored on the handle.
 
     Both callbacks run on the main Qt thread, driven by a
     ``qt.QTimer`` that this function schedules from whichever thread
@@ -88,7 +111,10 @@ def run_in_worker(
     """
     import qt
 
-    handle = WorkerHandle(thread=None)  # type: ignore[arg-type]
+    if progress_queue is None:
+        handle = WorkerHandle(thread=None)  # type: ignore[arg-type]
+    else:
+        handle = WorkerHandle(thread=None, progress_queue=progress_queue)  # type: ignore[arg-type]
 
     def _worker() -> None:
         try:
@@ -105,20 +131,32 @@ def run_in_worker(
     )
     handle.thread.start()
 
-    def _poll() -> None:
-        # Drain progress queue first so a final batch of lines is
-        # forwarded before we fire on_complete.
-        if on_progress is not None:
-            while True:
-                try:
-                    line = handle.progress_queue.get_nowait()
-                except queue.Empty:
-                    break
+    def _drain_progress() -> None:
+        if on_progress is None:
+            return
+        while True:
+            try:
+                line = handle.progress_queue.get_nowait()
+            except queue.Empty:
+                return
+            try:
                 on_progress(line)
+            except Exception:  # noqa: BLE001
+                # A broken on_progress must not halt the poll loop —
+                # that would hang run_with_progress_dialog's busy wait.
+                logging.exception("on_progress callback raised; continuing")
+
+    def _poll() -> None:
+        _drain_progress()
 
         if not handle.done_event.is_set():
             qt.QTimer.singleShot(_POLL_INTERVAL_MS, _poll)
             return
+
+        # The worker has finished; flush any lines it pushed between
+        # our last drain and its done_event.set() so the final batch
+        # (e.g. tqdm's last "193/193") isn't silently dropped.
+        _drain_progress()
 
         if handle.exception is not None:
             on_complete(None, handle.exception)
@@ -199,20 +237,116 @@ class ProgressDialog:
         scrollBar.setValue(scrollBar.maximum)
 
 
+class TqdmToProgressDialog:
+    """Context manager: route tqdm updates from known call sites into a queue.
+
+    Dipy-style modules typically do ``from tqdm import tqdm`` at the top
+    of a module, so they hold a local binding that's unaffected by
+    patches to ``tqdm.tqdm`` itself. We therefore patch each rebinding
+    listed in :data:`_TQDM_REBINDINGS` directly. On enter, each bound
+    name is replaced with a queue-writing subclass of the original tqdm;
+    on exit, originals are restored.
+
+    The subclass overrides ``display`` (tqdm's refresh hook); every
+    refresh emits a formatted line like ``"Fitting and Denoising:
+    12/193"`` into the provided queue. The main-thread poller inside
+    :func:`run_in_worker` drains the queue and forwards each line to
+    the progress dialog's log.
+
+    Per the Phase 2 plan this is deliberately fragile — new dipy
+    submodules won't be captured until they're added to
+    :data:`_TQDM_REBINDINGS`. The smoke tests in
+    ``test_bridge_async_helpers.py`` are the safety net that catches
+    "we added a module but forgot the binding" regressions.
+    """
+
+    def __init__(self, progress_queue: queue.Queue) -> None:
+        self._queue = progress_queue
+        self._originals: list[tuple[Any, str, Any]] = []
+        self._lock_held = False
+
+    def __enter__(self) -> TqdmToProgressDialog:
+        from tqdm import tqdm as real_tqdm
+
+        # One-at-a-time enforcement. The monkey-patch mutates module
+        # globals (dipy submodule `.tqdm`), so two concurrent contexts
+        # would race on `setattr` and one would restore the other's
+        # subclass as "original", permanently leaking the capture
+        # machinery. Rather than silently corrupt, refuse.
+        if not _TQDM_PATCH_LOCK.acquire(blocking=False):
+            msg = (
+                "Another TqdmToProgressDialog context is already active. "
+                "This helper is intentionally single-use — don't run two "
+                "kwneuro pipeline operations with capture_tqdm=True in "
+                "parallel."
+            )
+            raise RuntimeError(msg)
+        self._lock_held = True
+
+        capture_queue = self._queue
+
+        class _QueueingTqdm(real_tqdm):  # type: ignore[misc, valid-type]
+            def display(self, msg: Any = None, pos: Any = None) -> Any:  # type: ignore[override]
+                result = super().display(msg, pos)
+                try:
+                    line = self.format_meter(**self.format_dict)
+                except Exception:  # noqa: BLE001 — best-effort
+                    line = None
+                if line:
+                    capture_queue.put(line)
+                return result
+
+        try:
+            for module_name, attr in _TQDM_REBINDINGS:
+                try:
+                    mod = importlib.import_module(module_name)
+                except ImportError:
+                    continue
+                if hasattr(mod, attr):
+                    self._originals.append((mod, attr, getattr(mod, attr)))
+                    setattr(mod, attr, _QueueingTqdm)
+        except BaseException:
+            # If patching itself fails partway, restore what we've done
+            # and release the lock before re-raising.
+            for mod, attr, original in self._originals:
+                setattr(mod, attr, original)
+            self._originals = []
+            _TQDM_PATCH_LOCK.release()
+            self._lock_held = False
+            raise
+        return self
+
+    def __exit__(self, *exc: Any) -> None:
+        try:
+            for mod, attr, original in self._originals:
+                setattr(mod, attr, original)
+            self._originals = []
+        finally:
+            if self._lock_held:
+                _TQDM_PATCH_LOCK.release()
+                self._lock_held = False
+
+
 def run_with_progress_dialog(
     fn: Callable[[], T],
     *,
     title: str = "Working...",
     status: str = "Running...",
     parent: Any = None,
+    capture_tqdm: bool = False,
 ) -> T:
     """Run ``fn`` on a background thread behind a modal progress dialog.
 
     Blocks from the caller's perspective; returns whatever ``fn``
     returned, or re-raises whatever ``fn`` raised. Progress lines
-    pushed into the worker's ``progress_queue`` (e.g. by a
-    ``TqdmToProgressDialog`` shim in Milestone B) are forwarded into
-    the dialog's log area on the main thread.
+    pushed into the worker's ``progress_queue`` — either directly by
+    ``fn`` or by a :class:`TqdmToProgressDialog` shim (enabled via
+    ``capture_tqdm=True``) — are forwarded into the dialog's log area
+    on the main thread.
+
+    :param capture_tqdm: If True, wrap ``fn`` in a
+        :class:`TqdmToProgressDialog` context manager so tqdm progress
+        lines from dipy call sites are routed into the dialog log.
     """
     import qt
     import slicer
@@ -229,7 +363,28 @@ def run_with_progress_dialog(
         result["exception"] = exc
         completed.set()
 
-    run_in_worker(fn, on_complete=_on_complete, on_progress=dialog.appendLog)
+    # The TqdmToProgressDialog context manager must wrap `fn` in such a
+    # way that it activates on the worker thread (so monkey-patching
+    # affects the dipy import the worker will use) and reverts after
+    # fn completes. We build the queue up front and pass it both into
+    # run_in_worker and into the context manager — capturing it in a
+    # closure, not fetching it off the handle afterwards, to avoid a
+    # race where the worker dispatches fn before we bind.
+    if capture_tqdm:
+        progress_queue: queue.Queue = queue.Queue()
+
+        def _wrapped_with_capture() -> T:
+            with TqdmToProgressDialog(progress_queue):
+                return fn()
+
+        run_in_worker(
+            _wrapped_with_capture,
+            on_complete=_on_complete,
+            on_progress=dialog.appendLog,
+            progress_queue=progress_queue,
+        )
+    else:
+        run_in_worker(fn, on_complete=_on_complete, on_progress=dialog.appendLog)
 
     while not completed.is_set():
         slicer.app.processEvents()
@@ -239,9 +394,14 @@ def run_with_progress_dialog(
 
     if result["exception"] is not None:
         exc = result["exception"]
-        # Preserve the worker traceback in the log so post-mortem is possible.
+        # Preserve the worker traceback in the log AND on the raised
+        # exception. Python 3 attaches `__traceback__` to the exception
+        # object at raise-time in the worker thread, so re-raising here
+        # naturally carries that frame; but we pass it through
+        # `with_traceback` explicitly to defend against any interpreter
+        # that might reset it on cross-thread re-raise.
         dialog.appendLog("".join(traceback.format_exception(exc)))
-        raise exc
+        raise exc.with_traceback(exc.__traceback__)
     return result["value"]  # type: ignore[no-any-return]
 
 
