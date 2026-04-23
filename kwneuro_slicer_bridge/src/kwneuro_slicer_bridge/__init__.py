@@ -6,6 +6,12 @@ process without `slicer` and `vtk` on the path will fail at module load.
 """
 from __future__ import annotations
 
+from kwneuro_slicer_bridge.async_helpers import (
+    ProgressDialog,
+    ensure_extras_installed,
+    run_in_worker,
+    run_with_progress_dialog,
+)
 from kwneuro_slicer_bridge.dti import InSceneDti
 from kwneuro_slicer_bridge.dwi import InSceneDwi
 from kwneuro_slicer_bridge.transform import InSceneTransformResource
@@ -16,4 +22,8 @@ __all__ = [
     "InSceneDwi",
     "InSceneTransformResource",
     "InSceneVolumeResource",
+    "ProgressDialog",
+    "ensure_extras_installed",
+    "run_in_worker",
+    "run_with_progress_dialog",
 ]

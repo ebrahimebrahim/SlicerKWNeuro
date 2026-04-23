@@ -1,0 +1,3 @@
+# Runtime Python dependencies installed on demand.
+# This module uses only kwneuro APIs already brought in via
+# kwneuro_slicer_bridge (see KWNeuroEnvironment → Install / Update).
