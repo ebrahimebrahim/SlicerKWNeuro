@@ -26,6 +26,7 @@ add_subdirectory(KWNeuroDenoise)
 add_subdirectory(KWNeuroRegister)
 add_subdirectory(KWNeuroTemplate)
 add_subdirectory(KWNeuroCSD)
+add_subdirectory(KWNeuroNODDI)
 ## NEXT_MODULE
 
 #-----------------------------------------------------------------------------

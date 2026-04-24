@@ -1,0 +1,3 @@
+# NODDI fitting requires kwneuro[noddi]. KWNeuroNODDI checks this
+# via kwneuro_slicer_bridge.ensure_extras_installed and points users
+# at KWNeuroEnvironment if the extra is absent.
