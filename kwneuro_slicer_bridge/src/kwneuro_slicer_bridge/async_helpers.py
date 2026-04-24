@@ -48,13 +48,15 @@ _POLL_INTERVAL_MS = 50
 # raise rather than silently leaking.
 _TQDM_PATCH_LOCK = threading.Lock()
 
-# Modules that rebind `tqdm` via `from tqdm import tqdm` and that we want
-# to capture progress from. Dipy's pattern is universal but bindings are
-# per-submodule, so we have to list each one. Milestone B adds the
-# patch2self binding for denoise; extend here as future modules come
-# online (NODDI, CSD, TractSeg, etc.).
+# Modules that rebind tqdm and that we want to capture progress from.
+# Dipy's pattern is universal but bindings are per-submodule, so we have
+# to list each one. Some do `from tqdm import tqdm`, others
+# `from tqdm.auto import tqdm` — doesn't matter at patch time since we
+# just rebind the name on each listed module. Extend here as future
+# modules come online.
 _TQDM_REBINDINGS: tuple[tuple[str, str], ...] = (
-    ("dipy.denoise.patch2self", "tqdm"),
+    ("dipy.denoise.patch2self", "tqdm"),  # patch2self (Denoise module)
+    ("dipy.data.fetcher", "tqdm"),        # dataset fetches (Importer module)
 )
 
 

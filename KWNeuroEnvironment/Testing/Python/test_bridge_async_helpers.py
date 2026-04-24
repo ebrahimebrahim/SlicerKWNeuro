@@ -256,9 +256,19 @@ class TestTqdmToProgressDialog(unittest.TestCase):
             # dipy.sims.force is the FORCE model simulator. kwneuro
             # doesn't call it, and its bars are verbose=True-gated.
             "dipy.sims.force",
+            # dipy.utils.parallel's tqdm bars are all `disable=not
+            # verbose`; kwneuro never passes verbose=True, so there's
+            # no progress to capture.
+            "dipy.utils.parallel",
         }
 
-        pattern = re.compile(r"^\s*from\s+tqdm\s+import\s+tqdm\b", re.MULTILINE)
+        # Catch both `from tqdm import tqdm` and `from tqdm.auto import
+        # tqdm` / `from tqdm.std import tqdm`. Missing this was how a
+        # dipy submodule (dipy.data.fetcher) slipped past the first
+        # version of this test.
+        pattern = re.compile(
+            r"^\s*from\s+tqdm(?:\.\w+)*\s+import\s+tqdm\b", re.MULTILINE,
+        )
         missing: list[str] = []
         for py_file in dipy_root.rglob("*.py"):
             try:

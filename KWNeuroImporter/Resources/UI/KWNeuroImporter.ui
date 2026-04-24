@@ -1,0 +1,189 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>KWNeuroImporter</class>
+ <widget class="qMRMLWidget" name="KWNeuroImporter">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>480</width>
+    <height>420</height>
+   </rect>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="ctkCollapsibleButton" name="importDwiCollapsibleButton">
+     <property name="text">
+      <string>Import DWI from disk</string>
+     </property>
+     <layout class="QFormLayout" name="importDwiFormLayout">
+      <item row="0" column="0">
+       <widget class="QLabel" name="volumeLabel">
+        <property name="text">
+         <string>NIfTI volume:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="ctkPathLineEdit" name="volumePathLineEdit">
+        <property name="toolTip">
+         <string>4D NIfTI file containing the diffusion-weighted volumes.</string>
+        </property>
+        <property name="nameFilters">
+         <stringlist>
+          <string>NIfTI (*.nii *.nii.gz)</string>
+         </stringlist>
+        </property>
+        <property name="filters">
+         <set>ctkPathLineEdit::Files|ctkPathLineEdit::Readable</set>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="bvalLabel">
+        <property name="text">
+         <string>FSL bval file:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="ctkPathLineEdit" name="bvalPathLineEdit">
+        <property name="toolTip">
+         <string>FSL-style .bval file listing the b-value for each gradient direction.</string>
+        </property>
+        <property name="nameFilters">
+         <stringlist>
+          <string>FSL b-values (*.bval)</string>
+          <string>All files (*)</string>
+         </stringlist>
+        </property>
+        <property name="filters">
+         <set>ctkPathLineEdit::Files|ctkPathLineEdit::Readable</set>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="bvecLabel">
+        <property name="text">
+         <string>FSL bvec file:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="ctkPathLineEdit" name="bvecPathLineEdit">
+        <property name="toolTip">
+         <string>FSL-style .bvec file listing the gradient direction for each volume.</string>
+        </property>
+        <property name="nameFilters">
+         <stringlist>
+          <string>FSL b-vectors (*.bvec)</string>
+          <string>All files (*)</string>
+         </stringlist>
+        </property>
+        <property name="filters">
+         <set>ctkPathLineEdit::Files|ctkPathLineEdit::Readable</set>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="0">
+       <widget class="QLabel" name="nameLabel">
+        <property name="text">
+         <string>Node name:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="QLineEdit" name="nameLineEdit">
+        <property name="toolTip">
+         <string>Name for the created vtkMRMLDiffusionWeightedVolumeNode in the scene.</string>
+        </property>
+        <property name="text">
+         <string>dwi</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="0" colspan="2">
+       <widget class="QPushButton" name="loadButton">
+        <property name="text">
+         <string>Load DWI</string>
+        </property>
+        <property name="toolTip">
+         <string>Read the three files from disk and push a vtkMRMLDiffusionWeightedVolumeNode into the scene using InSceneDwi.from_nifti_path. Unlike Slicer's built-in Add Data, this preserves the 4th dimension and attaches gradient + b-value metadata to the node.</string>
+        </property>
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="ctkCollapsibleButton" name="sampleDataCollapsibleButton">
+     <property name="text">
+      <string>Sample data</string>
+     </property>
+     <layout class="QVBoxLayout" name="sampleDataLayout">
+      <item>
+       <widget class="QPushButton" name="loadSherbrookeButton">
+        <property name="text">
+         <string>Load Sherbrooke 3-shell (HARDI193)</string>
+        </property>
+        <property name="toolTip">
+         <string>Download (if needed) and load dipy's Sherbrooke 3-shell diffusion dataset as a vtkMRMLDiffusionWeightedVolumeNode named HARDI193. Cached at ~/.dipy/sherbrooke_3shell/ after the first download (~30 MB).</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="resultLabel">
+     <property name="text">
+      <string>(nothing loaded)</string>
+     </property>
+     <property name="textInteractionFlags">
+      <set>Qt::TextSelectableByMouse</set>
+     </property>
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <spacer name="verticalSpacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>40</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>qMRMLWidget</class>
+   <extends>QWidget</extends>
+   <header>qMRMLWidget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ctkCollapsibleButton</class>
+   <extends>QWidget</extends>
+   <header>ctkCollapsibleButton.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>ctkPathLineEdit</class>
+   <extends>QWidget</extends>
+   <header>ctkPathLineEdit.h</header>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections/>
+</ui>
