@@ -12,11 +12,11 @@ The volume is a live `InSceneVolumeResource` view of the node; bval
 and bvec are snapshots taken at construction (copied from the node's
 gradient/b-value attributes into in-memory resources).
 
-Phase 1 decision: the measurement frame defaults to identity.
-kwneuro's `Dwi` does not model a gradient frame explicitly (dipy
-convention: gradients are already in the scan frame), so identity
-round-trips correctly. DICOM-origin users who care about glyph-space
-orientation can pass an explicit `measurement_frame=` to `from_dwi`.
+The measurement frame defaults to identity. kwneuro's `Dwi` does not
+model a gradient frame explicitly (dipy convention: gradients are
+already in the scan frame), so identity round-trips correctly.
+DICOM-origin users who care about glyph-space orientation can pass
+an explicit `measurement_frame=` to `from_dwi`.
 """
 from __future__ import annotations
 

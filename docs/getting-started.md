@@ -7,23 +7,25 @@ interactor.
 
 ## 1. Build or install Slicer
 
-Phase 1 targets Slicer with Python 3.12 (a recent nightly or
+The extension targets Slicer with Python 3.12 (a recent nightly or
 5.11-class superbuild). A fresh build or a pre-built installer both
 work.
 
 ## 2. Clone the extension and point Slicer at it
 
 The extension currently lives inside the `kwneuro` working tree at
-`kwneuro/slicer-extn/`. Phase 1 users run Slicer with
-`--additional-module-paths` pointed at the `KWNeuroEnvironment`
-module:
+`kwneuro/slicer-extn/`. Until it lands in the Extension Index, run
+Slicer with `--additional-module-paths` pointed at each module
+directory (or at the build-tree parent that contains them all).
+The simplest path during development is to use the
+build-tree-generated `SlicerWithKWNeuro` launcher documented in the
+repo `README.md`:
 
 ```sh
-path/to/Slicer \
-  --additional-module-paths /absolute/path/to/kwneuro/slicer-extn/KWNeuroEnvironment
+/tmp/kwneuro-extn-build/SlicerWithKWNeuro
 ```
 
-Alternatively, add the path via *Edit → Application Settings →
+Alternatively, add the paths via *Edit → Application Settings →
 Modules → Additional module paths* in the Slicer GUI and restart.
 
 ## 3. Open the KWNeuro Environment module

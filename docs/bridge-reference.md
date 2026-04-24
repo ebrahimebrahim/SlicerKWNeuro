@@ -51,8 +51,8 @@ VTK-interleaved-tensor layout live in
 ## InSceneDwi avoids the `loadVolume` 4D trap
 
 `slicer.util.loadVolume` defaults to `vtkMRMLScalarVolumeNode`, which
-silently drops the 4th dimension of a 4D NIfTI (surfaced in Phase 0
-E4). `InSceneDwi.from_nifti_path` loads the DWI via `nibabel` +
+silently drops the 4th dimension of a 4D NIfTI — a real footgun for
+DWI data. `InSceneDwi.from_nifti_path` loads the DWI via `nibabel` +
 `kwneuro.io.NiftiVolumeResource` and pushes it into the scene as a
 `vtkMRMLDiffusionWeightedVolumeNode` — gradient dimension preserved,
 bval / bvec stored as node attributes.
@@ -125,11 +125,13 @@ subclassing. `to_in_memory()` matters when you want to serialize, hand
 the data off to code that inspects types strictly, or free the scene
 node without losing the data.
 
-## Phase 1 transitional notes
+## Known limitations
 
 - `InSceneTransformResource` supports one-way conversion
-  (kwneuro → Slicer) only. Slicer → kwneuro (saving scene transforms to
-  ANTs `.mat` / `.nii`) is deferred.
-- `InSceneDti.volume` is a snapshot (see above). Phase 2 may replace
-  it with a live view that reads the node's tensor data on each access
-  if the snapshot becomes a practical limitation.
+  (kwneuro → Slicer) only. Slicer → kwneuro (saving scene transforms
+  to ANTs `.mat` / `.nii` files) isn't implemented.
+- `InSceneDti.volume` is a snapshot built at construction — it doesn't
+  refresh when the underlying scene node's tensor data changes. Call
+  `InSceneDti.from_node(node)` again to rewrap. A live-view
+  alternative could be added later if the snapshot becomes a
+  practical limitation.

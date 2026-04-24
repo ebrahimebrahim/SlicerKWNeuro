@@ -8,8 +8,8 @@
 * The node class is truly `vtkMRMLDiffusionWeightedVolumeNode`.
 * `InSceneDwi` is a `Dwi` (isinstance check passes).
 * `from_nifti_path` on the cached Sherbrooke 3-shell HARDI193 dataset
-  preserves the 4th dimension (resolves the Phase 0 E4 finding that
-  `slicer.util.loadVolume` silently dropped it).
+  preserves the 4th dimension — the whole reason this bridge method
+  exists, since `slicer.util.loadVolume` silently drops it.
 """
 from __future__ import annotations
 

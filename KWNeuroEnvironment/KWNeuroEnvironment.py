@@ -13,7 +13,9 @@ Design notes:
 * Each extra is installed separately via `slicer.packaging.pip_install`,
   hard-coded with the package spec kwneuro's own pyproject.toml declares
   for that extra. TractSeg uses `skip_packages=["fury"]` to preserve
-  Slicer's bundled VTK (see phase-0-findings.md).
+  Slicer's bundled VTK — installing fury would drag in a second,
+  incompatible VTK alongside Slicer's and break rendering (see
+  `CLAUDE.md` for the longer write-up).
 * The Verify setup action imports kwneuro + the bridge, pushes a small
   synthetic volume into the scene via `InSceneVolumeResource`, verifies
   round-trip, and cleans up.
@@ -46,7 +48,7 @@ BRIDGE_PATH = Path(__file__).resolve().parent.parent / "kwneuro_slicer_bridge"
 # PyPI (or PyPI-style) requirement(s) that mirror the corresponding
 # optional dependency group in kwneuro's pyproject.toml. "skip_packages"
 # is used only for tractseg to prune fury from the resolution so Slicer's
-# bundled VTK is preserved (see phase-0-findings.md).
+# bundled VTK is preserved.
 EXTRAS_INSTALL_SPEC: dict[str, dict[str, object]] = {
     "hdbet": {
         "packages": ["hd-bet == 2.0.1"],
@@ -325,7 +327,7 @@ class KWNeuroEnvironmentTest(ScriptedLoadableModuleTest):
         self.test_LogicProbesWork()
 
     def test_LogicProbesWork(self):
-        self.delayDisplay("Starting KWNeuroEnvironment Phase 1 logic test")
+        self.delayDisplay("Starting KWNeuroEnvironment logic smoke test")
         logic = KWNeuroEnvironmentLogic()
         _ = logic.installed_kwneuro_version()
         _ = logic.installed_bridge_version()

@@ -1,14 +1,13 @@
 """KWNeuroDenoise - denoise a DWI via dipy's Patch2Self.
 
-Establishes the progress-dialog + tqdm-capture pattern for the rest
-of Phase 2: the worker's per-gradient tqdm output flows into the
-dialog's Details log via
+Uses the progress-dialog + tqdm-capture pattern: the worker's
+per-gradient tqdm output flows into the dialog's Details log via
 :class:`kwneuro_slicer_bridge.async_helpers.TqdmToProgressDialog`,
 routed through the worker's ``progress_queue`` and drained on the
 main thread.
 
-Logic follows the three-phase split established by KWNeuroDTI so
-that MRML scene mutations stay on the main Qt thread.
+Logic uses the three-phase split so MRML scene mutations stay on
+the main Qt thread.
 """
 from __future__ import annotations
 

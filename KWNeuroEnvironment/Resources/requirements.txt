@@ -1,2 +1,4 @@
 # Runtime Python dependencies installed on demand from the KWNeuroEnvironment widget.
-# Phase 0: empty — the environment panel and its install flow are Phase 1 work.
+# Intentionally empty — this module's *purpose* is to drive pip installs of
+# kwneuro + the bridge + the four optional extras, so there are no extras
+# for Slicer's own pip_ensure scaffolding to install up front.

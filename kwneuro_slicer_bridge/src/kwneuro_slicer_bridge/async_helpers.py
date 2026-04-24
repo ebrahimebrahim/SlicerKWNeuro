@@ -255,11 +255,12 @@ class TqdmToProgressDialog:
     :func:`run_in_worker` drains the queue and forwards each line to
     the progress dialog's log.
 
-    Per the Phase 2 plan this is deliberately fragile — new dipy
-    submodules won't be captured until they're added to
-    :data:`_TQDM_REBINDINGS`. The smoke tests in
-    ``test_bridge_async_helpers.py`` are the safety net that catches
-    "we added a module but forgot the binding" regressions.
+    This is deliberately fragile: new dipy submodules won't be
+    captured until they're added to :data:`_TQDM_REBINDINGS`. The
+    smoke tests in ``test_bridge_async_helpers.py`` (including a
+    regex scan of dipy's source for ``from tqdm ... import tqdm``)
+    are the safety net that catches "we added a module but forgot
+    the binding" regressions.
     """
 
     def __init__(self, progress_queue: queue.Queue) -> None:

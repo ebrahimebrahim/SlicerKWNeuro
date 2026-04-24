@@ -4,15 +4,15 @@ A 3D Slicer extension that brings the [kwneuro](https://github.com/KitwareMedica
 diffusion-MRI library into Slicer — both as a scriptable bridge for
 pipeline developers and as clickable GUI modules for researchers.
 
-## Status: Phase 2 (pipeline GUI modules)
+## What's here
 
-Eleven scripted modules (KWNeuroEnvironment plus ten pipeline-stage
-wrappers), each wrapping a kwneuro pipeline stage as a Slicer module. Same three-phase architecture across all of them —
-materialise inputs on the main Qt thread, run the heavy numpy /
-dipy / ANTs / AMICO / TractSeg compute on a background worker,
-publish outputs back on the main thread — so every module stays
-responsive under a modal progress dialog without crashing the
-subject-hierarchy plugin.
+Eleven scripted modules: **KWNeuroEnvironment** (manages install
+state) plus ten pipeline-stage wrappers. Each pipeline module uses
+the same three-phase architecture — materialise inputs on the main
+Qt thread, run the heavy numpy / dipy / ANTs / AMICO / TractSeg
+compute on a background worker, publish outputs back on the main
+thread — so every module stays responsive under a modal progress
+dialog without crashing the subject-hierarchy plugin.
 
 | Module | Role | kwneuro extra required |
 |---|---|---|
@@ -40,21 +40,10 @@ package exposing:
   `TqdmToProgressDialog`, `ensure_extras_installed`: the async +
   extras helpers that every pipeline module uses.
 
-Phase summary:
-
-- **Phase 0** (complete) — scaffold, install probes, coordinate-system
-  correctness. Findings in `phase-0-findings.md`.
-- **Phase 1** (complete) — `KWNeuroEnvironment`, the four bridge
-  classes, docs.
-- **Phase 1.5** (complete) — SlicerJupyter fixes for Linux + Python
-  3.12 (landed upstream in Slicer/SlicerJupyter).
-- **Phase 2** (complete) — the ten pipeline modules above (on top of
-  KWNeuroEnvironment), async/progress infrastructure, review-driven
-  test hardening.
-
-Future: Extension Index submission, CI, cancellation story for the
-heavy multi-minute modules (TractSeg / Template), NVIDIA-GPU
-pre-flight improvements beyond the TractSeg warning dialog.
+Known follow-up work: Extension Index submission, CI, cancellation
+story for the heavy multi-minute modules (TractSeg / Template),
+NVIDIA-GPU pre-flight improvements beyond the TractSeg warning
+dialog.
 
 ## Layout
 
@@ -66,9 +55,8 @@ pre-flight improvements beyond the TractSeg warning dialog.
   `pyproject.toml` pins a specific `kwneuro` git ref.
 - `docs/` — Sphinx site.
 - `notebooks/` — SlicerJupyter-kernel walkthroughs (see below).
-- `experiments/` — Phase 0 experiment scripts retained as reference.
-- `phase-0-findings.md` — Phase 0 findings + user decisions feeding
-  Phase 1.
+- `CLAUDE.md` — working notes for contributors: architectural
+  decisions, coordinate-system traps, review-driven test patterns.
 
 ## Using the modules
 

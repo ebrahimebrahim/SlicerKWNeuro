@@ -11,13 +11,14 @@ representation for the same information is a **list of transform nodes**:
 `slicer.util.loadTransform` dispatches on file extension and produces
 the correct node type.
 
-Phase 1 scope: one-way conversion from kwneuro to Slicer (`from_transform`
-and `from_affine_matrix`). Going the other direction — building a new
-`TransformResource` from Slicer scene nodes — needs saving nodes to disk
-and is deferred. Unlike the other InScene* classes this is a standalone
-wrapper, not a subclass of its kwneuro analogue, because kwneuro's
-`TransformResource` models the transform as file paths rather than as a
-live handle you can populate from the scene.
+Currently one-way: kwneuro -> Slicer via `from_transform` and
+`from_affine_matrix`. Going the other direction — building a new
+`TransformResource` from Slicer scene nodes — needs saving nodes to
+disk first and isn't implemented. Unlike the other InScene* classes
+this is a standalone wrapper, not a subclass of its kwneuro
+analogue, because kwneuro's `TransformResource` models the transform
+as file paths rather than as a live handle you can populate from the
+scene.
 """
 from __future__ import annotations
 

@@ -268,10 +268,10 @@ class TestKWNeuroDTILogic(unittest.TestCase):
 
 class TestKWNeuroDTIWidget(unittest.TestCase):
     """Widget-state checks. Guards against regressions where the Apply
-    button fails to track scene changes — observed at Phase 2 Checkpoint
-    1 when the UI file was missing the ``mrmlSceneChanged`` → child-combo
-    ``setMRMLScene`` connections, so the combo box never auto-selected a
-    scene-added DWI and the Apply button stayed disabled.
+    button fails to track scene changes — the ``.ui`` must wire
+    ``mrmlSceneChanged`` to every child ``qMRMLNodeComboBox``'s
+    ``setMRMLScene`` or the combo never sees scene-added DWIs and the
+    Apply button stays disabled.
     """
 
     def setUp(self) -> None:

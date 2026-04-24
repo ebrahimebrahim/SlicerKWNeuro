@@ -7,10 +7,9 @@ each stage visually alongside running the code.
 
 **Run this walkthrough interactively** from Slicer's Python console
 (`Ctrl+3`). Paste each cell block one at a time and watch the scene
-tree populate after each stage. Once
-[SlicerJupyter is fixed (Phase 1.5)](../index.md) this same content
-will be available as a runnable notebook under
-`slicer-extn/notebooks/`.
+tree populate after each stage. A runnable SlicerJupyter notebook
+version of the same workflow lives at
+`slicer-extn/notebooks/kwneuro-pipeline-walkthrough.py`.
 
 ## Prerequisites
 
@@ -76,9 +75,11 @@ print("mean b0 node:", mean_b0_svr.node_id, "shape:", mean_b0_svr.get_array().sh
 
 ## 3. Denoise the DWI (Patch2Self)
 
-Takes a couple of minutes on the Sherbrooke sample and freezes Slicer's
-UI while it runs. Phase 2 pipeline modules will move long-running work
-off the main thread; Phase 1 is intentionally synchronous.
+Takes a couple of minutes on the Sherbrooke sample and freezes
+Slicer's UI while it runs. If you want a responsive UI during the
+run, use the `KWNeuroDenoise` scripted module instead — it wraps the
+same call in a progress dialog and runs the work on a background
+thread.
 
 ```python
 denoised_dwi = sdwi.denoise()

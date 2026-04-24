@@ -17,8 +17,8 @@ Structure:
 - "Sample data" section: one-click fetch for the Sherbrooke 3-shell
   dataset (``dipy.data.fetch_sherbrooke_3shell``).
 
-Logic is split into the three phases established by KWNeuroDTI so
-MRML scene writes stay on the main Qt thread.
+Logic uses the three-phase split so MRML scene writes stay on the
+main Qt thread.
 """
 from __future__ import annotations
 

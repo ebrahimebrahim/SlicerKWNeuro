@@ -7,9 +7,9 @@ The hd_bet extra (``kwneuro[hdbet]``, which pulls in torch + nnunetv2)
 is required; ``ensure_extras_installed`` checks this up front and
 points the user at KWNeuroEnvironment if the extra isn't present.
 
-Follows the three-phase split established by KWNeuroDTI: the DWI is
-materialised into memory on the main Qt thread, HD-BET runs on a
-worker thread, and the labelmap node is added on the main thread.
+Uses the three-phase split: the DWI is materialised into memory on
+the main Qt thread, HD-BET runs on a worker thread, and the labelmap
+node is added on the main thread.
 """
 from __future__ import annotations
 

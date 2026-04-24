@@ -7,11 +7,10 @@ option is on, ``Dti.get_fa_md`` is evaluated and the two scalar maps
 are added as ``vtkMRMLScalarVolumeNode``\\s with ``_fa`` / ``_md``
 suffixes.
 
-Establishes the shared module-structure pattern used by the rest of
-the Phase 2 pipeline modules: scripted module under
-``slicer-extn/KWNeuro<name>/``, Module + Logic + Widget + Test in the
-main ``.py``, ``.ui`` under ``Resources/UI/``, test under
-``Testing/Python/``.
+Reference for the module-structure pattern shared across all
+pipeline modules: scripted module under ``slicer-extn/KWNeuro<name>/``,
+Module + Logic + Widget + Test in the main ``.py``, ``.ui`` under
+``Resources/UI/``, test under ``Testing/Python/``.
 """
 from __future__ import annotations
 

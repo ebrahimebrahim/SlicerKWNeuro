@@ -6,7 +6,7 @@ project(KWNeuro)
 # Extension meta-information
 set(EXTENSION_HOMEPAGE "https://github.com/brain-microstructure-exploration-tools/KWNeuro")
 set(EXTENSION_CONTRIBUTORS "Ebrahim Ebrahim (Kitware, Inc.)")
-set(EXTENSION_DESCRIPTION "Bridge to the kwneuro diffusion MRI processing library — Phase 0 scaffold.")
+set(EXTENSION_DESCRIPTION "Bring the kwneuro diffusion MRI library into 3D Slicer as scriptable bridge classes and click-through GUI modules for denoising, brain extraction, DTI, CSD, NODDI, tractography, registration, template building, and harmonisation.")
 set(EXTENSION_ICONURL "https://raw.githubusercontent.com/brain-microstructure-exploration-tools/KWNeuro/main/KWNeuro.png")
 set(EXTENSION_SCREENSHOTURLS "https://raw.githubusercontent.com/brain-microstructure-exploration-tools/KWNeuro/main/KWNeuro.png")
 set(EXTENSION_DEPENDS "NA") # Specified as a list or "NA" if no dependencies
