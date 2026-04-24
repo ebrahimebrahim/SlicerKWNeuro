@@ -1,0 +1,119 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>KWNeuroHarmonize</class>
+ <widget class="qMRMLWidget" name="KWNeuroHarmonize">
+  <property name="geometry"><rect><x>0</x><y>0</y><width>480</width><height>540</height></rect></property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="ctkCollapsibleButton" name="inputsCollapsibleButton">
+     <property name="text"><string>Inputs</string></property>
+     <layout class="QVBoxLayout" name="inputsLayout">
+      <item>
+       <widget class="QLabel" name="volumesHelpLabel">
+        <property name="text">
+         <string>Add the 3D scalar volumes to harmonize (e.g. FA maps in template space), one per subject. The order here MUST match the rows in the covariates CSV.</string>
+        </property>
+        <property name="wordWrap"><bool>true</bool></property>
+       </widget>
+      </item>
+      <item>
+       <layout class="QHBoxLayout" name="addVolumeLayout">
+        <item>
+         <widget class="qMRMLNodeComboBox" name="volumeToAddSelector">
+          <property name="nodeTypes"><stringlist notr="true"><string>vtkMRMLScalarVolumeNode</string></stringlist></property>
+          <property name="showChildNodeTypes"><bool>false</bool></property>
+          <property name="addEnabled"><bool>false</bool></property>
+          <property name="removeEnabled"><bool>false</bool></property>
+          <property name="noneEnabled"><bool>false</bool></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="addVolumeButton"><property name="text"><string>Add</string></property></widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <widget class="QListWidget" name="volumesListWidget">
+        <property name="selectionMode"><enum>QAbstractItemView::ExtendedSelection</enum></property>
+        <property name="toolTip"><string>Volumes to harmonize, in row order matching the covariates CSV.</string></property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="removeSelectedButton"><property name="text"><string>Remove selected</string></property></widget>
+      </item>
+      <item>
+       <layout class="QFormLayout" name="maskFormLayout">
+        <item row="0" column="0"><widget class="QLabel" name="maskLabel"><property name="text"><string>Mask:</string></property></widget></item>
+        <item row="0" column="1">
+         <widget class="qMRMLNodeComboBox" name="maskSelector">
+          <property name="toolTip"><string>3D mask (must match the volumes' shape). Harmonization happens only in-mask.</string></property>
+          <property name="nodeTypes"><stringlist notr="true"><string>vtkMRMLScalarVolumeNode</string><string>vtkMRMLLabelMapVolumeNode</string></stringlist></property>
+          <property name="showChildNodeTypes"><bool>false</bool></property>
+          <property name="addEnabled"><bool>false</bool></property>
+          <property name="removeEnabled"><bool>false</bool></property>
+          <property name="noneEnabled"><bool>false</bool></property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="ctkCollapsibleButton" name="covariatesCollapsibleButton">
+     <property name="text"><string>Covariates</string></property>
+     <layout class="QFormLayout" name="covariatesFormLayout">
+      <item row="0" column="0"><widget class="QLabel" name="covarsCsvLabel"><property name="text"><string>Covariates CSV:</string></property></widget></item>
+      <item row="0" column="1">
+       <widget class="ctkPathLineEdit" name="covarsPathLineEdit">
+        <property name="toolTip"><string>CSV with one row per volume, in the same order as the list above. Must contain the batch column.</string></property>
+        <property name="nameFilters"><stringlist><string>CSV files (*.csv)</string><string>All files (*)</string></stringlist></property>
+        <property name="filters"><set>ctkPathLineEdit::Files|ctkPathLineEdit::Readable</set></property>
+       </widget>
+      </item>
+      <item row="1" column="0"><widget class="QLabel" name="batchColLabel"><property name="text"><string>Batch column:</string></property></widget></item>
+      <item row="1" column="1">
+       <widget class="QLineEdit" name="batchColLineEdit">
+        <property name="text"><string>site</string></property>
+        <property name="toolTip"><string>Name of the column in the CSV that identifies the scanner / site / batch.</string></property>
+       </widget>
+      </item>
+      <item row="2" column="0"><widget class="QLabel" name="preserveLabel"><property name="text"><string>Out-of-mask:</string></property></widget></item>
+      <item row="2" column="1">
+       <widget class="QCheckBox" name="preserveOutOfMaskCheckBox">
+        <property name="text"><string>preserve original values</string></property>
+        <property name="checked"><bool>true</bool></property>
+        <property name="toolTip"><string>If checked, voxels outside the mask keep their original values. If unchecked, they're zeroed out in the harmonised output.</string></property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="applyButton">
+     <property name="text"><string>Harmonize</string></property>
+     <property name="toolTip"><string>Run neuroCombat across the listed volumes. Requires at least two distinct values in the batch column. Creates one harmonised scalar volume per input (suffix _harmonized).</string></property>
+     <property name="enabled"><bool>false</bool></property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="resultLabel">
+     <property name="text"><string>(not run)</string></property>
+     <property name="wordWrap"><bool>true</bool></property>
+     <property name="textInteractionFlags"><set>Qt::TextSelectableByMouse</set></property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget><class>qMRMLWidget</class><extends>QWidget</extends><header>qMRMLWidget.h</header><container>1</container></customwidget>
+  <customwidget><class>qMRMLNodeComboBox</class><extends>QWidget</extends><header>qMRMLNodeComboBox.h</header></customwidget>
+  <customwidget><class>ctkCollapsibleButton</class><extends>QWidget</extends><header>ctkCollapsibleButton.h</header><container>1</container></customwidget>
+  <customwidget><class>ctkPathLineEdit</class><extends>QWidget</extends><header>ctkPathLineEdit.h</header></customwidget>
+ </customwidgets>
+ <resources/>
+ <connections>
+  <connection><sender>KWNeuroHarmonize</sender><signal>mrmlSceneChanged(vtkMRMLScene*)</signal><receiver>volumeToAddSelector</receiver><slot>setMRMLScene(vtkMRMLScene*)</slot></connection>
+  <connection><sender>KWNeuroHarmonize</sender><signal>mrmlSceneChanged(vtkMRMLScene*)</signal><receiver>maskSelector</receiver><slot>setMRMLScene(vtkMRMLScene*)</slot></connection>
+ </connections>
+</ui>

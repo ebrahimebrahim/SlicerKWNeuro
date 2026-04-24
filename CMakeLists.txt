@@ -28,6 +28,7 @@ add_subdirectory(KWNeuroTemplate)
 add_subdirectory(KWNeuroCSD)
 add_subdirectory(KWNeuroNODDI)
 add_subdirectory(KWNeuroTractSeg)
+add_subdirectory(KWNeuroHarmonize)
 ## NEXT_MODULE
 
 #-----------------------------------------------------------------------------
