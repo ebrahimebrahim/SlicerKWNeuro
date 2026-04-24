@@ -59,8 +59,9 @@ pre-flight improvements beyond the TractSeg warning dialog.
 ## Layout
 
 - `CMakeLists.txt` — extension metadata.
-- Ten `KWNeuro*/` scripted-module directories, each with
-  `*.py`, `Resources/UI/*.ui`, `Testing/Python/test_*.py`.
+- Eleven `KWNeuro*/` scripted-module directories (KWNeuroEnvironment
+  plus ten pipeline modules), each with `*.py`, `Resources/UI/*.ui`,
+  `Testing/Python/test_*.py`.
 - `kwneuro_slicer_bridge/` — pip-installable Python package. Its
   `pyproject.toml` pins a specific `kwneuro` git ref.
 - `docs/` — Sphinx site.
@@ -133,6 +134,22 @@ The `--no-deps` flag preserves whatever `kwneuro` is already installed
 `--no-deps` the first time to let pip pull `kwneuro` from the git ref
 pinned in `kwneuro_slicer_bridge/pyproject.toml`.
 
+Several pipeline modules call `ensure_extras_installed(...)` on the
+matching kwneuro optional extra and will raise a clear error if it's
+missing — that's caught in the widget and surfaced as an error
+dialog at Apply time. For tests, the ComBat extra is **required**:
+`py_test_kwneuroharmonize` deliberately fails rather than skips if
+`neuroCombat` isn't importable (see the "Run the test suite" section
+below). To install it into Slicer's Python:
+
+```sh
+~/slicer-superbuild-v5.11/python-install/bin/PythonSlicer \
+    -m pip install "neuroCombat==0.2.12"
+```
+
+or via the **KWNeuro Environment** module UI by ticking the *combat*
+checkbox after loading the extension in Slicer.
+
 #### Configure + build
 
 ```sh
@@ -163,10 +180,19 @@ cd /tmp/kwneuro-extn-build
 ctest -j$(nproc) --output-on-failure --no-tests=error
 ```
 
-Expected: all tests pass in ~2-3 min. Pass count varies with which
-optional extras are installed (e.g. the Harmonize end-to-end test
-*fails* rather than skips if `kwneuro[combat]` is absent — that's
-deliberate so CI can't silently skip its only real coverage).
+Expected: **38 tests, all pass in ~2-3 min**. The test count is
+stable regardless of which optional extras are installed — almost
+every module's tests either use synthetic data or mock the optional
+dependency (HD-BET, AMICO, TractSeg). The one exception is
+`py_test_kwneuroharmonize`, which **fails rather than skips** if
+`neuroCombat` is missing (see prerequisites above) — we deliberately
+avoid silently skipping the only real end-to-end coverage of the
+harmonisation module.
+
+Two tests *skip cleanly* when the Sherbrooke 3-shell DWI hasn't been
+cached locally (see the note below): `test_from_nifti_path_preserves_4d_shape`
+and `test_load_sherbrooke_if_cached`. The fetch code path itself is
+covered by a mocked test that doesn't require the data.
 
 ### Run one test by name
 
