@@ -48,12 +48,11 @@ class InSceneVolumeResource(VolumeResource):
     Metadata
     --------
     `get_metadata()` returns Slicer-specific identity keys
-    (`slicer_node_id`, `slicer_node_name`). kwneuro's
-    `update_volume_metadata` preserves custom keys through the pipeline
-    so these origin markers flow through cleanly. They don't survive a
-    NIfTI save (nibabel only writes real NIfTI fields), which is the
-    only sensible behaviour — a scene node ID has no meaning outside the
-    session that assigned it.
+    (`slicer_node_id`, `slicer_node_name`) while the resource remains
+    scene-backed. `to_in_memory()` drops them at the detach boundary
+    — they have no meaning outside the session that assigned them,
+    and unlike real NIfTI header fields they'd blow up if piped
+    through nibabel's header `__setitem__`.
     """
 
     is_loaded: ClassVar[bool] = True
@@ -98,11 +97,29 @@ class InSceneVolumeResource(VolumeResource):
     # --- Conversions / factories ---
 
     def to_in_memory(self) -> InMemoryVolumeResource:
-        """Detach from the scene, returning a pure-Python kwneuro resource."""
+        """Detach from the scene, returning a pure-Python kwneuro resource.
+
+        Drops the Slicer-specific identity keys (``slicer_node_id``,
+        ``slicer_node_name``) on the way out. Those are diagnostic
+        markers that don't survive a NIfTI save and — crucially — blow
+        up downstream when kwneuro code pipes the metadata dict through
+        ``nib.Nifti1Header[key] = val`` (e.g. in ``to_ants_image``).
+
+        Seeds the metadata with only the spatial half of
+        ``xyzt_units``: ``2`` means mm for xyz. kwneuro's
+        ``to_ants_image`` checks only the spatial axis and rejects
+        anything other than mm — Slicer's IJK-to-RAS convention is
+        millimetres, so this assertion is safe. We deliberately do
+        NOT set a temporal unit: Slicer does not track temporal units
+        for volume nodes, so claiming "seconds" here would be a
+        fabrication that leaks into any downstream NIfTI save.
+        """
+        # NIfTI xyzt_units bit field: 2 = mm spatial, 0 = unknown
+        # temporal. We pin spatial only.
         return InMemoryVolumeResource(
             array=self.get_array(),
             affine=self.get_affine(),
-            metadata=self.get_metadata(),
+            metadata={"xyzt_units": 2},
         )
 
     @staticmethod

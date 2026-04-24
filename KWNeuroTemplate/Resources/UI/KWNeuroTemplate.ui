@@ -1,0 +1,111 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>KWNeuroTemplate</class>
+ <widget class="qMRMLWidget" name="KWNeuroTemplate">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>460</width>
+    <height>460</height>
+   </rect>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="ctkCollapsibleButton" name="inputsCollapsibleButton">
+     <property name="text"><string>Inputs</string></property>
+     <layout class="QVBoxLayout" name="inputsLayout">
+      <item>
+       <layout class="QHBoxLayout" name="addVolumeLayout">
+        <item>
+         <widget class="qMRMLNodeComboBox" name="volumeToAddSelector">
+          <property name="toolTip">
+           <string>Pick a 3D volume and click Add to include it in the template input list.</string>
+          </property>
+          <property name="nodeTypes">
+           <stringlist notr="true">
+            <string>vtkMRMLScalarVolumeNode</string>
+           </stringlist>
+          </property>
+          <property name="addEnabled"><bool>false</bool></property>
+          <property name="removeEnabled"><bool>false</bool></property>
+          <property name="noneEnabled"><bool>false</bool></property>
+         </widget>
+        </item>
+        <item>
+         <widget class="QPushButton" name="addVolumeButton">
+          <property name="text"><string>Add</string></property>
+          <property name="toolTip"><string>Append the currently selected volume to the input list.</string></property>
+         </widget>
+        </item>
+       </layout>
+      </item>
+      <item>
+       <widget class="QListWidget" name="volumesListWidget">
+        <property name="toolTip">
+         <string>Volumes that will be included in the template. Double-click or press Delete to remove an entry.</string>
+        </property>
+        <property name="selectionMode">
+         <enum>QAbstractItemView::ExtendedSelection</enum>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="removeSelectedButton">
+        <property name="text"><string>Remove selected</string></property>
+        <property name="toolTip"><string>Remove the highlighted entries from the list.</string></property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="ctkCollapsibleButton" name="optionsCollapsibleButton">
+     <property name="text"><string>Options</string></property>
+     <layout class="QFormLayout" name="optionsFormLayout">
+      <item row="0" column="0">
+       <widget class="QLabel" name="iterationsLabel">
+        <property name="text"><string>Iterations:</string></property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="QSpinBox" name="iterationsSpinBox">
+        <property name="minimum"><number>1</number></property>
+        <property name="maximum"><number>10</number></property>
+        <property name="value"><number>3</number></property>
+        <property name="toolTip">
+         <string>Number of template refinement iterations. More iterations -> better convergence but longer runtime (each iteration does one SyN registration per input volume).</string>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="applyButton">
+     <property name="text"><string>Apply</string></property>
+     <property name="toolTip">
+      <string>Build an unbiased group-wise template from the input volumes. Takes several minutes for realistic data.</string>
+     </property>
+     <property name="enabled"><bool>false</bool></property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="resultLabel">
+     <property name="text"><string>(not run)</string></property>
+     <property name="wordWrap"><bool>true</bool></property>
+     <property name="textInteractionFlags"><set>Qt::TextSelectableByMouse</set></property>
+    </widget>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget><class>qMRMLWidget</class><extends>QWidget</extends><header>qMRMLWidget.h</header><container>1</container></customwidget>
+  <customwidget><class>qMRMLNodeComboBox</class><extends>QWidget</extends><header>qMRMLNodeComboBox.h</header></customwidget>
+  <customwidget><class>ctkCollapsibleButton</class><extends>QWidget</extends><header>ctkCollapsibleButton.h</header><container>1</container></customwidget>
+ </customwidgets>
+ <resources/>
+ <connections>
+  <connection><sender>KWNeuroTemplate</sender><signal>mrmlSceneChanged(vtkMRMLScene*)</signal><receiver>volumeToAddSelector</receiver><slot>setMRMLScene(vtkMRMLScene*)</slot></connection>
+ </connections>
+</ui>

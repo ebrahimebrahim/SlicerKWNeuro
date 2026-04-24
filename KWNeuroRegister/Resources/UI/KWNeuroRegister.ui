@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>KWNeuroRegister</class>
+ <widget class="qMRMLWidget" name="KWNeuroRegister">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>440</width>
+    <height>380</height>
+   </rect>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="ctkCollapsibleButton" name="inputsCollapsibleButton">
+     <property name="text">
+      <string>Inputs</string>
+     </property>
+     <layout class="QFormLayout" name="inputsFormLayout">
+      <item row="0" column="0">
+       <widget class="QLabel" name="fixedLabel">
+        <property name="text">
+         <string>Fixed volume:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="qMRMLNodeComboBox" name="fixedSelector">
+        <property name="toolTip">
+         <string>Reference (fixed) 3D volume. The moving volume is warped onto this one.</string>
+        </property>
+        <property name="nodeTypes">
+         <stringlist notr="true">
+          <string>vtkMRMLScalarVolumeNode</string>
+          <string>vtkMRMLLabelMapVolumeNode</string>
+         </stringlist>
+        </property>
+        <property name="addEnabled"><bool>false</bool></property>
+        <property name="removeEnabled"><bool>false</bool></property>
+        <property name="noneEnabled"><bool>false</bool></property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="movingLabel">
+        <property name="text">
+         <string>Moving volume:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="qMRMLNodeComboBox" name="movingSelector">
+        <property name="toolTip">
+         <string>Volume to warp to the fixed volume's space.</string>
+        </property>
+        <property name="nodeTypes">
+         <stringlist notr="true">
+          <string>vtkMRMLScalarVolumeNode</string>
+          <string>vtkMRMLLabelMapVolumeNode</string>
+         </stringlist>
+        </property>
+        <property name="addEnabled"><bool>false</bool></property>
+        <property name="removeEnabled"><bool>false</bool></property>
+        <property name="noneEnabled"><bool>false</bool></property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="transformTypeLabel">
+        <property name="text">
+         <string>Transform type:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="QComboBox" name="transformTypeComboBox">
+        <property name="toolTip">
+         <string>ANTs transform type. SyN = deformable (recommended for cross-subject). Rigid / Affine = linear only.</string>
+        </property>
+        <item><property name="text"><string>SyN</string></property></item>
+        <item><property name="text"><string>Affine</string></property></item>
+        <item><property name="text"><string>Rigid</string></property></item>
+        <item><property name="text"><string>SyNRA</string></property></item>
+       </widget>
+      </item>
+      <item row="3" column="0">
+       <widget class="QLabel" name="fixedMaskLabel">
+        <property name="text">
+         <string>Fixed mask (optional):</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="qMRMLNodeComboBox" name="fixedMaskSelector">
+        <property name="toolTip">
+         <string>Optional mask constraining registration to a region of the fixed volume.</string>
+        </property>
+        <property name="nodeTypes">
+         <stringlist notr="true">
+          <string>vtkMRMLScalarVolumeNode</string>
+          <string>vtkMRMLLabelMapVolumeNode</string>
+         </stringlist>
+        </property>
+        <property name="addEnabled"><bool>false</bool></property>
+        <property name="removeEnabled"><bool>false</bool></property>
+        <property name="noneEnabled"><bool>true</bool></property>
+       </widget>
+      </item>
+      <item row="4" column="0">
+       <widget class="QLabel" name="movingMaskLabel">
+        <property name="text">
+         <string>Moving mask (optional):</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="1">
+       <widget class="qMRMLNodeComboBox" name="movingMaskSelector">
+        <property name="toolTip">
+         <string>Optional mask constraining registration to a region of the moving volume.</string>
+        </property>
+        <property name="nodeTypes">
+         <stringlist notr="true">
+          <string>vtkMRMLScalarVolumeNode</string>
+          <string>vtkMRMLLabelMapVolumeNode</string>
+         </stringlist>
+        </property>
+        <property name="addEnabled"><bool>false</bool></property>
+        <property name="removeEnabled"><bool>false</bool></property>
+        <property name="noneEnabled"><bool>true</bool></property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="applyButton">
+     <property name="text"><string>Apply</string></property>
+     <property name="toolTip">
+      <string>Register the moving volume to the fixed volume. Creates the warped moving volume plus one or more transform nodes (linear + warp) representing the fwd transform.</string>
+     </property>
+     <property name="enabled"><bool>false</bool></property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="resultLabel">
+     <property name="text"><string>(not run)</string></property>
+     <property name="wordWrap"><bool>true</bool></property>
+     <property name="textInteractionFlags"><set>Qt::TextSelectableByMouse</set></property>
+    </widget>
+   </item>
+   <item>
+    <spacer name="verticalSpacer">
+     <property name="orientation"><enum>Qt::Vertical</enum></property>
+     <property name="sizeHint" stdset="0"><size><width>20</width><height>20</height></size></property>
+    </spacer>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget><class>qMRMLWidget</class><extends>QWidget</extends><header>qMRMLWidget.h</header><container>1</container></customwidget>
+  <customwidget><class>qMRMLNodeComboBox</class><extends>QWidget</extends><header>qMRMLNodeComboBox.h</header></customwidget>
+  <customwidget><class>ctkCollapsibleButton</class><extends>QWidget</extends><header>ctkCollapsibleButton.h</header><container>1</container></customwidget>
+ </customwidgets>
+ <resources/>
+ <connections>
+  <connection><sender>KWNeuroRegister</sender><signal>mrmlSceneChanged(vtkMRMLScene*)</signal><receiver>fixedSelector</receiver><slot>setMRMLScene(vtkMRMLScene*)</slot></connection>
+  <connection><sender>KWNeuroRegister</sender><signal>mrmlSceneChanged(vtkMRMLScene*)</signal><receiver>movingSelector</receiver><slot>setMRMLScene(vtkMRMLScene*)</slot></connection>
+  <connection><sender>KWNeuroRegister</sender><signal>mrmlSceneChanged(vtkMRMLScene*)</signal><receiver>fixedMaskSelector</receiver><slot>setMRMLScene(vtkMRMLScene*)</slot></connection>
+  <connection><sender>KWNeuroRegister</sender><signal>mrmlSceneChanged(vtkMRMLScene*)</signal><receiver>movingMaskSelector</receiver><slot>setMRMLScene(vtkMRMLScene*)</slot></connection>
+ </connections>
+</ui>

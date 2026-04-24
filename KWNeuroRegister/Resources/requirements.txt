@@ -1,0 +1,2 @@
+# kwneuro.reg depends on antspyx, which is a core kwneuro dependency
+# (no optional extra needed).

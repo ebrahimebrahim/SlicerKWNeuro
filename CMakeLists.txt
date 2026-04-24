@@ -23,6 +23,8 @@ add_subdirectory(KWNeuroImporter)
 add_subdirectory(KWNeuroBrainExtract)
 add_subdirectory(KWNeuroDTI)
 add_subdirectory(KWNeuroDenoise)
+add_subdirectory(KWNeuroRegister)
+add_subdirectory(KWNeuroTemplate)
 ## NEXT_MODULE
 
 #-----------------------------------------------------------------------------
