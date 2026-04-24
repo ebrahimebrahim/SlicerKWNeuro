@@ -1,54 +1,128 @@
 # KWNeuro — 3D Slicer extension bridging `kwneuro`
 
 A 3D Slicer extension that brings the [kwneuro](https://github.com/KitwareMedical/kwneuro)
-diffusion-MRI library into Slicer — first as a scriptable bridge for pipeline
-developers, then as clickable GUI modules for researchers.
+diffusion-MRI library into Slicer — both as a scriptable bridge for
+pipeline developers and as clickable GUI modules for researchers.
 
-## Status: Phase 1 (developer release)
+## Status: Phase 2 (pipeline GUI modules)
 
-Installable developer release. The `KWNeuroEnvironment` module manages
-kwneuro + bridge + four extras; the `kwneuro_slicer_bridge` package
-exposes four scene-backed classes, two of which subclass kwneuro's own
-`Dwi` / `Dti` (so they drop directly into any pipeline function).
+Eleven scripted modules (KWNeuroEnvironment plus ten pipeline-stage
+wrappers), each wrapping a kwneuro pipeline stage as a Slicer module. Same three-phase architecture across all of them —
+materialise inputs on the main Qt thread, run the heavy numpy /
+dipy / ANTs / AMICO / TractSeg compute on a background worker,
+publish outputs back on the main thread — so every module stays
+responsive under a modal progress dialog without crashing the
+subject-hierarchy plugin.
 
-Phases:
+| Module | Role | kwneuro extra required |
+|---|---|---|
+| **KWNeuroEnvironment** | Install / manage kwneuro, bridge, and the four optional extras | — |
+| **KWNeuroImporter** | Load DWI from NIfTI + FSL bval/bvec (preserves 4D); fetch Sherbrooke sample | — |
+| **KWNeuroBrainExtract** | HD-BET brain mask from DWI mean b0 | `hdbet` |
+| **KWNeuroDenoise** | Patch2Self denoising (dipy) | — |
+| **KWNeuroDTI** | Tensor fit + optional FA / MD; mask accepts scalar / labelmap / segmentation | — |
+| **KWNeuroCSD** | Constrained Spherical Deconvolution peaks (MRtrix3-style vector volume) | — |
+| **KWNeuroNODDI** | NODDI via AMICO (NDI / ODI / FWF, optional modulated maps) | `noddi` |
+| **KWNeuroTractSeg** | CNN-based tract segmentation (72 bundle masks, endings, or TOM) | `tractseg` |
+| **KWNeuroRegister** | ANTs registration (Rigid / Affine / SyN / SyNRA) with optional masks | — |
+| **KWNeuroTemplate** | Iterative unbiased group-wise template construction via ANTs | — |
+| **KWNeuroHarmonize** | Cross-site ComBat harmonisation of scalar maps (group-level) | `combat` |
+
+Plus **`kwneuro_slicer_bridge`** — a small pip-installable Python
+package exposing:
+
+- `InSceneVolumeResource`, `InSceneDwi`, `InSceneDti`,
+  `InSceneTransformResource`: scene-backed wrappers. `InSceneDwi`
+  and `InSceneDti` subclass kwneuro's own `Dwi` / `Dti` so they
+  drop directly into any pipeline function that takes the parent
+  type.
+- `run_in_worker`, `run_with_progress_dialog`, `ProgressDialog`,
+  `TqdmToProgressDialog`, `ensure_extras_installed`: the async +
+  extras helpers that every pipeline module uses.
+
+Phase summary:
 
 - **Phase 0** (complete) — scaffold, install probes, coordinate-system
-  correctness checks. Findings in `phase-0-findings.md`.
-- **Phase 1** (now) — `KWNeuroEnvironment` panel + four bridge classes
-  + docs + a hand-written DMRI pipeline walkthrough tutorial.
-- **Phase 1.5** (after Phase 1) — fix `SlicerJupyter` so the bridge
-  works from a Slicer-backed Jupyter kernel. Runnable notebook
-  versions of the tutorials land then.
-- **Phase 2** — GUI modules exposing kwneuro pipeline stages (DTI first,
-  then NODDI, TractSeg, CSD, registration), many with no Slicer UI today.
+  correctness. Findings in `phase-0-findings.md`.
+- **Phase 1** (complete) — `KWNeuroEnvironment`, the four bridge
+  classes, docs.
+- **Phase 1.5** (complete) — SlicerJupyter fixes for Linux + Python
+  3.12 (landed upstream in Slicer/SlicerJupyter).
+- **Phase 2** (complete) — the ten pipeline modules above (on top of
+  KWNeuroEnvironment), async/progress infrastructure, review-driven
+  test hardening.
+
+Future: Extension Index submission, CI, cancellation story for the
+heavy multi-minute modules (TractSeg / Template), NVIDIA-GPU
+pre-flight improvements beyond the TractSeg warning dialog.
 
 ## Layout
 
 - `CMakeLists.txt` — extension metadata.
-- `KWNeuroEnvironment/` — the environment-panel scripted module; its
-  `Testing/Python/` hosts the bridge round-trip tests.
-- `kwneuro_slicer_bridge/` — pip-installable Python package exposing
-  the four scene-backed classes. Pinned to a specific kwneuro git ref
-  via its `pyproject.toml`.
-- `docs/` — Sphinx site (build instructions below).
-- `notebooks/` — placeholder; runnable notebooks land once
-  SlicerJupyter is fixed in Phase 1.5.
+- Ten `KWNeuro*/` scripted-module directories, each with
+  `*.py`, `Resources/UI/*.ui`, `Testing/Python/test_*.py`.
+- `kwneuro_slicer_bridge/` — pip-installable Python package. Its
+  `pyproject.toml` pins a specific `kwneuro` git ref.
+- `docs/` — Sphinx site.
+- `notebooks/` — SlicerJupyter-kernel walkthroughs (see below).
 - `experiments/` — Phase 0 experiment scripts retained as reference.
 - `phase-0-findings.md` — Phase 0 findings + user decisions feeding
   Phase 1.
 
-## Running tests
+## Using the modules
 
-Tests are registered via `slicer_add_python_unittest(...)` in
-`KWNeuroEnvironment/Testing/Python/CMakeLists.txt` and run through
-CTest against a Slicer build. The instructions below assume a Slicer
-superbuild at `~/slicer-superbuild-v5.11/`; substitute your own path.
+Launch Slicer with the extension (either via the Extension Manager
+once released, or a build-tree launcher during development — see
+*Development* below).
 
-### Prerequisites
+**Typical single-subject flow** (matches the notebook at
+`notebooks/kwneuro-pipeline-walkthrough.py`):
+
+1. **KWNeuro Environment**: click *Install / Update* to sync the
+   bridge + kwneuro, tick any optional extras you need.
+2. **KWNeuro Importer**: either load your own DWI (pick the NIfTI,
+   `.bval`, `.bvec` files + a node name) or click *Load Sherbrooke
+   3-shell* for sample data.
+3. **KWNeuro Denoise** (optional): patch2self denoising.
+4. **KWNeuro Brain Extract** (optional, needs `hdbet`): HD-BET mask.
+5. **KWNeuro DTI**: fit the tensor. Accepts a scalar / labelmap /
+   segmentation mask — pick the segment in the second dropdown that
+   appears when a segmentation is selected.
+6. **KWNeuro CSD** / **KWNeuro NODDI** / **KWNeuro TractSeg**: any
+   of the model-fit modules.
+
+**Multi-volume modules** (operate on two or more volumes at once):
+
+- **KWNeuro Register** (pairwise): align a moving volume to a fixed
+  volume via ANTs. Per-subject, not group-level.
+- **KWNeuro Template** (group): build an unbiased template from ≥ 2
+  volumes.
+- **KWNeuro Harmonize** (group): ComBat-harmonise scalar maps across
+  sites. Requires a CSV whose row order matches the volume list, plus
+  a batch column; volumes must share an affine (enforced at
+  validation).
+
+### Demo notebook
+
+`notebooks/kwneuro-pipeline-walkthrough.py` (jupytext percent format)
+runs the single-subject pipeline end-to-end inside SlicerJupyter.
+Convert to `.ipynb` with `jupytext --to ipynb` or execute cell-by-cell
+via the Slicer Python console. Full prereqs are in the notebook
+header.
+
+## Development
+
+### Configure + build the extension once
+
+Tests are registered via `slicer_add_python_unittest(...)` in each
+module's `Testing/Python/CMakeLists.txt` and run through CTest against
+a Slicer build. The instructions below assume a Slicer superbuild at
+`~/slicer-superbuild-v5.11/`; substitute your own path.
+
+#### Prerequisites
 
 Pip-install the bridge package into Slicer's Python so the bridge
-tests have something to import:
+tests and the modules' lazy imports have something to import:
 
 ```sh
 ~/slicer-superbuild-v5.11/python-install/bin/PythonSlicer -m pip install --no-deps -e kwneuro_slicer_bridge
@@ -59,7 +133,7 @@ The `--no-deps` flag preserves whatever `kwneuro` is already installed
 `--no-deps` the first time to let pip pull `kwneuro` from the git ref
 pinned in `kwneuro_slicer_bridge/pyproject.toml`.
 
-### Configure + build the extension once
+#### Configure + build
 
 ```sh
 mkdir -p /tmp/kwneuro-extn-build && cd /tmp/kwneuro-extn-build
@@ -67,27 +141,37 @@ cmake -DSlicer_DIR=$HOME/slicer-superbuild-v5.11/Slicer-build $OLDPWD
 cmake --build .
 ```
 
-The build step copies the scripted-module sources into a per-build
-`lib/Slicer-5.11/qt-scripted-modules/` tree where CTest finds them. Re-
-run `cmake --build .` after editing any source under
-`KWNeuroEnvironment/`. Changes in `kwneuro_slicer_bridge/` don't need
-a rebuild — the pip install is editable.
+CMake copies the scripted-module sources into
+`lib/Slicer-5.11/qt-scripted-modules/` where CTest picks them up.
+Re-run `cmake --build .` after editing any module source.
+`kwneuro_slicer_bridge/` changes don't need a rebuild (editable pip).
 
-### Run the suite
+#### Launch Slicer with the extension
+
+```sh
+/tmp/kwneuro-extn-build/SlicerWithKWNeuro
+```
+
+This is a CMake-generated launcher that points Slicer at the build
+tree's module paths — the KWNeuro modules appear under *Modules →
+KWNeuro* without a permanent install.
+
+### Run the test suite
 
 ```sh
 cd /tmp/kwneuro-extn-build
 ctest -j$(nproc) --output-on-failure --no-tests=error
 ```
 
-Expected output: `100% tests passed, 0 tests failed out of 7` (five
-bridge round-trip tests, the env-panel smoke, plus an automatically-
-added generic module-loads test from the `WITH_GENERIC_TESTS` flag).
+Expected: all tests pass in ~2-3 min. Pass count varies with which
+optional extras are installed (e.g. the Harmonize end-to-end test
+*fails* rather than skips if `kwneuro[combat]` is absent — that's
+deliberate so CI can't silently skip its only real coverage).
 
 ### Run one test by name
 
 ```sh
-ctest -R py_test_bridge_volume_roundtrip --no-tests=error --output-on-failure
+ctest -R py_test_kwneurodti --no-tests=error --output-on-failure
 ```
 
 `--no-tests=error` is important: without it, a typo'd regex matching
@@ -100,16 +184,14 @@ ctest -N
 
 ### Notes
 
-- Sample-data prerequisite: `test_bridge_dwi_roundtrip.py`'s
-  4D-shape check uses the Sherbrooke 3-shell DWI. Populate the DIPY
-  cache once with:
+- **Sample-data prerequisite** for some tests: the Sherbrooke 3-shell
+  DWI. Populate the DIPY cache once with:
   ```sh
   ~/slicer-superbuild-v5.11/python-install/bin/PythonSlicer \
     -c "from dipy.data import fetch_sherbrooke_3shell; fetch_sherbrooke_3shell()"
   ```
-- No GitHub-Actions-style CI yet (per Phase 0 decision — CI lands
-  around Extension Index submission). Run `ctest` manually while
-  iterating on Phase 1 / 2.
+  Tests that need it skip cleanly when absent; the mocked-Sherbrooke
+  test in `KWNeuroImporter` covers the fetch code path regardless.
 
 ## Building the docs
 
@@ -123,11 +205,6 @@ then invoke sphinx:
 ```
 
 Open `docs/_build/html/index.html` to view the site.
-
-The tutorials are hand-written markdown in `docs/tutorials/`. Once
-SlicerJupyter is fixed in Phase 1.5, runnable notebook versions of the
-tutorials will land under `notebooks/` and a build-time step will
-render them into `docs/tutorials/`.
 
 ## License
 
