@@ -101,67 +101,54 @@ header.
 
 ## Development
 
-### Configure + build the extension once
+### 1. Configure + build
 
-Tests are registered via `slicer_add_python_unittest(...)` in each
-module's `Testing/Python/CMakeLists.txt` and run through CTest against
-a Slicer build. The instructions below assume a Slicer superbuild at
-`~/slicer-superbuild-v5.11/`; substitute your own path.
-
-#### Prerequisites
-
-Pip-install the bridge package into Slicer's Python so the bridge
-tests and the modules' lazy imports have something to import:
-
-```sh
-~/slicer-superbuild-v5.11/python-install/bin/PythonSlicer -m pip install --no-deps -e kwneuro_slicer_bridge
-```
-
-The `--no-deps` flag preserves whatever `kwneuro` is already installed
-(useful when you're iterating on both repos in lockstep). Drop
-`--no-deps` the first time to let pip pull `kwneuro` from the git ref
-pinned in `kwneuro_slicer_bridge/pyproject.toml`.
-
-Several pipeline modules call `ensure_extras_installed(...)` on the
-matching kwneuro optional extra and will raise a clear error if it's
-missing — that's caught in the widget and surfaced as an error
-dialog at Apply time. For tests, the ComBat extra is **required**:
-`py_test_kwneuroharmonize` deliberately fails rather than skips if
-`neuroCombat` isn't importable (see the "Run the test suite" section
-below). To install it into Slicer's Python:
-
-```sh
-~/slicer-superbuild-v5.11/python-install/bin/PythonSlicer \
-    -m pip install "neuroCombat==0.2.12"
-```
-
-or via the **KWNeuro Environment** module UI by ticking the *combat*
-checkbox after loading the extension in Slicer.
-
-#### Configure + build
+The extension is standard Slicer CMake — no scripted-module Python
+install required up front. Point CMake at your Slicer build tree and
+run the build:
 
 ```sh
 mkdir -p /tmp/kwneuro-extn-build && cd /tmp/kwneuro-extn-build
-cmake -DSlicer_DIR=$HOME/slicer-superbuild-v5.11/Slicer-build $OLDPWD
+cmake -DSlicer_DIR=/path/to/Slicer-build $OLDPWD
 cmake --build .
 ```
 
-CMake copies the scripted-module sources into
-`lib/Slicer-5.11/qt-scripted-modules/` where CTest picks them up.
-Re-run `cmake --build .` after editing any module source.
-`kwneuro_slicer_bridge/` changes don't need a rebuild (editable pip).
+Substitute your own Slicer build path for `/path/to/Slicer-build`.
+Re-run `cmake --build .` after editing any scripted module.
+`kwneuro_slicer_bridge/` changes don't need a rebuild — the bridge
+is pip-installed editably in the next step.
 
-#### Launch Slicer with the extension
+### 2. Launch Slicer with the extension
 
 ```sh
 /tmp/kwneuro-extn-build/SlicerWithKWNeuro
 ```
 
-This is a CMake-generated launcher that points Slicer at the build
-tree's module paths — the KWNeuro modules appear under *Modules →
-KWNeuro* without a permanent install.
+This is a CMake-generated launcher that points Slicer at the
+build-tree's module paths — the KWNeuro modules appear under
+*Modules → KWNeuro* without a permanent install.
 
-### Run the test suite
+### 3. Install `kwneuro` + bridge + any extras
+
+Open **KWNeuro Environment** and click **Install / Update**. That
+pip-installs `kwneuro_slicer_bridge` into Slicer's Python — the
+bridge's `pyproject.toml` pulls `kwneuro` itself from the pinned git
+ref as a transitive dependency. Then tick any optional-extra
+checkboxes you want (`hdbet`, `noddi`, `tractseg`, `combat`); the
+panel drives `slicer.packaging.pip_install` for each, including the
+`skip_packages=["fury"]` dance TractSeg needs.
+
+Click **Verify setup** to confirm the bridge round-trips a synthetic
+volume through the scene.
+
+For running the CTest suite (below), you need the **combat** extra
+ticked — `py_test_kwneuroharmonize` fails rather than skips if
+`neuroCombat` is absent.
+
+You can now quit Slicer; the installs are persistent in Slicer's
+bundled Python.
+
+### 4. Run the test suite
 
 ```sh
 cd /tmp/kwneuro-extn-build
@@ -169,13 +156,11 @@ ctest -j$(nproc) --output-on-failure --no-tests=error
 ```
 
 Expected: **38 tests, all pass in ~2-3 min**. The test count is
-stable regardless of which optional extras are installed — almost
-every module's tests either use synthetic data or mock the optional
+stable regardless of which extras are installed — almost every
+module's tests either use synthetic data or mock the optional
 dependency (HD-BET, AMICO, TractSeg). The one exception is
-`py_test_kwneuroharmonize`, which **fails rather than skips** if
-`neuroCombat` is missing (see prerequisites above) — we deliberately
-avoid silently skipping the only real end-to-end coverage of the
-harmonisation module.
+`py_test_kwneuroharmonize`, which fails rather than skips without
+the `combat` extra.
 
 Two tests *skip cleanly* when the Sherbrooke 3-shell DWI hasn't been
 cached locally (see the note below): `test_from_nifti_path_preserves_4d_shape`
@@ -196,26 +181,26 @@ passing typo. List available tests first:
 ctest -N
 ```
 
-### Notes
+### Sample-data prerequisite
 
-- **Sample-data prerequisite** for some tests: the Sherbrooke 3-shell
-  DWI. Populate the DIPY cache once with:
-  ```sh
-  ~/slicer-superbuild-v5.11/python-install/bin/PythonSlicer \
-    -c "from dipy.data import fetch_sherbrooke_3shell; fetch_sherbrooke_3shell()"
-  ```
-  Tests that need it skip cleanly when absent; the mocked-Sherbrooke
-  test in `KWNeuroImporter` covers the fetch code path regardless.
+Two tests load the Sherbrooke 3-shell DWI from DIPY's cache and
+skip when it's absent. The simplest way to populate the cache is
+through the extension itself: in Slicer, open **KWNeuro Importer**
+and click *Load Sherbrooke 3-shell (HARDI193)* once. That downloads
+the dataset to `~/.dipy/sherbrooke_3shell/`, where the CTest run
+will find it.
+
+(If you'd rather populate the cache headlessly for CI, `dipy.data.fetch_sherbrooke_3shell()`
+does the same thing from any Python that imports `dipy`.)
 
 ## Building the docs
 
-Install the bridge with its `docs` extra (one-time setup; picks up
-sphinx + sphinx-autoapi + myst_parser + sphinx_copybutton + furo),
-then invoke sphinx:
+The docs build runs outside Slicer, so this step needs a regular
+Python with the `docs` extra of the bridge package installed:
 
 ```sh
-~/slicer-superbuild-v5.11/python-install/bin/PythonSlicer -m pip install --no-deps -e './kwneuro_slicer_bridge[docs]'
-~/slicer-superbuild-v5.11/python-install/bin/PythonSlicer -m sphinx -n -T docs docs/_build/html
+python -m pip install -e './kwneuro_slicer_bridge[docs]'
+python -m sphinx -n -T docs docs/_build/html
 ```
 
 Open `docs/_build/html/index.html` to view the site.
