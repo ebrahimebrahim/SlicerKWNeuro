@@ -1,0 +1,1 @@
+# CSD peak computation uses dipy; no optional extras required.

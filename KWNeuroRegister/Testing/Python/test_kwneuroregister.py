@@ -18,8 +18,13 @@ import unittest
 import numpy as np
 
 
-def _synthetic_volume(name: str, seed: int = 0):
-    """A small 3D volume for ANTs registration tests."""
+def _synthetic_volume(name: str, seed: int = 0, blob_offset: int = 0):
+    """A small 3D volume for ANTs registration tests.
+
+    ``blob_offset`` shifts the central blob along all three axes so
+    callers can produce two differently-positioned volumes ANTs must
+    actually register (rather than just match noise patterns).
+    """
     import slicer
 
     from kwneuro.resource import InMemoryVolumeResource
@@ -28,8 +33,9 @@ def _synthetic_volume(name: str, seed: int = 0):
     rng = np.random.default_rng(seed=seed)
     nx, ny, nz = 12, 12, 12
     array = np.zeros((nx, ny, nz), dtype=np.float32)
-    # A blob so ANTs has something to align to.
-    array[3:9, 3:9, 3:9] = 100.0
+    start = 3 + blob_offset
+    end = 9 + blob_offset
+    array[start:end, start:end, start:end] = 100.0
     array += rng.normal(0.0, 5.0, size=array.shape).astype(np.float32)
     affine = np.diag([2.0, 3.0, 4.0, 1.0])
     return InSceneVolumeResource.from_resource(
@@ -59,8 +65,11 @@ class TestKWNeuroRegisterLogic(unittest.TestCase):
         from kwneuro_slicer_bridge import InSceneVolumeResource
         from KWNeuroRegister import KWNeuroRegisterLogic
 
-        fixed_node = _synthetic_volume("reg_fixed")
-        moving_node = _synthetic_volume("reg_moving", seed=1)
+        # Fixed blob at the default position; moving shifted by 2
+        # voxels along all three axes so ANTs has a real translation
+        # to recover.
+        fixed_node = _synthetic_volume("reg_fixed", seed=0, blob_offset=0)
+        moving_node = _synthetic_volume("reg_moving", seed=1, blob_offset=2)
 
         logic = KWNeuroRegisterLogic()
         ids = logic.process(
