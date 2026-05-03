@@ -16,7 +16,7 @@ dialog without crashing the subject-hierarchy plugin.
 
 | Module | Role | kwneuro extra required |
 |---|---|---|
-| **KWNeuroEnvironment** | Install / manage kwneuro, bridge, and the four optional extras | — |
+| **KWNeuroEnvironment** | Install / manage kwneuro and the four optional extras (the bridge ships bundled, no install needed) | — |
 | **KWNeuroImporter** | Load DWI from NIfTI + FSL bval/bvec (preserves 4D); fetch Sherbrooke sample | — |
 | **KWNeuroBrainExtract** | HD-BET brain mask from DWI mean b0 | `hdbet` |
 | **KWNeuroDenoise** | Patch2Self denoising (dipy) | — |
@@ -28,8 +28,8 @@ dialog without crashing the subject-hierarchy plugin.
 | **KWNeuroTemplate** | Iterative unbiased group-wise template construction via ANTs | — |
 | **KWNeuroHarmonize** | Cross-site ComBat harmonisation of scalar maps (group-level) | `combat` |
 
-Plus **`kwneuro_slicer_bridge`** — a small pip-installable Python
-package exposing:
+Plus **`kwneuro_slicer_bridge`** — a small Python package bundled
+with the extension (no separate install) exposing:
 
 - `InSceneVolumeResource`, `InSceneDwi`, `InSceneDti`,
   `InSceneTransformResource`: scene-backed wrappers. `InSceneDwi`
@@ -51,8 +51,9 @@ dialog.
 - Eleven `KWNeuro*/` scripted-module directories (KWNeuroEnvironment
   plus ten pipeline modules), each with `*.py`, `Resources/UI/*.ui`,
   `Testing/Python/test_*.py`.
-- `kwneuro_slicer_bridge/` — pip-installable Python package. Its
-  `pyproject.toml` pins a specific `kwneuro` git ref.
+- `kwneuro_slicer_bridge/` — bundled Python package (built via
+  `slicerMacroBuildScriptedModule` like a library "module"; ends up
+  alongside the scripted modules in the install layout).
 - `docs/` — Sphinx site.
 - `notebooks/` — SlicerJupyter-kernel walkthroughs (see below).
 - `CLAUDE.md` — working notes for contributors: architectural
@@ -67,8 +68,10 @@ once released, or a build-tree launcher during development — see
 **Typical single-subject flow** (matches the notebook at
 `notebooks/kwneuro-pipeline-walkthrough.py`):
 
-1. **KWNeuro Environment**: click *Install / Update* to sync the
-   bridge + kwneuro, tick any optional extras you need.
+1. **KWNeuro Environment**: click *Install / Update* to install (or
+   refresh) the `kwneuro` library into Slicer's Python; tick any
+   optional extras you need. The `kwneuro_slicer_bridge` package
+   ships with the extension and needs no install.
 2. **KWNeuro Importer**: either load your own DWI (pick the NIfTI,
    `.bval`, `.bvec` files + a node name) or click *Load Sherbrooke
    3-shell* for sample data.
@@ -114,9 +117,10 @@ cmake --build .
 ```
 
 Substitute your own Slicer build path for `/path/to/Slicer-build`.
-Re-run `cmake --build .` after editing any scripted module.
-`kwneuro_slicer_bridge/` changes don't need a rebuild — the bridge
-is pip-installed editably in the next step.
+Re-run `cmake --build .` after editing any scripted module or any
+file inside `kwneuro_slicer_bridge/` (the bridge goes through the
+same per-file copy pipeline as the modules — incremental builds
+re-copy only the changed files).
 
 ### 2. Launch Slicer with the extension
 
@@ -128,15 +132,19 @@ This is a CMake-generated launcher that points Slicer at the
 build-tree's module paths — the KWNeuro modules appear under
 *Modules → KWNeuro* without a permanent install.
 
-### 3. Install `kwneuro` + bridge + any extras
+### 3. Install `kwneuro` + any extras
 
 Open **KWNeuro Environment** and click **Install / Update**. That
-pip-installs `kwneuro_slicer_bridge` into Slicer's Python — the
-bridge's `pyproject.toml` pulls `kwneuro` itself from the pinned git
-ref as a transitive dependency. Then tick any optional-extra
-checkboxes you want (`hdbet`, `noddi`, `tractseg`, `combat`); the
-panel drives `slicer.packaging.pip_install` for each, including the
+pip-installs the `kwneuro` library from its pinned git ref into
+Slicer's Python. Then tick any optional-extra checkboxes you want
+(`hdbet`, `noddi`, `tractseg`, `combat`); the panel drives
+`slicer.packaging.pip_install` for each, including the
 `skip_packages=["fury"]` dance TractSeg needs.
+
+The `kwneuro_slicer_bridge` package ships bundled with the extension
+(in the same `qt-scripted-modules/` directory as the modules), so
+nothing needs to install it — `import kwneuro_slicer_bridge` just
+works.
 
 Click **Verify setup** to confirm the bridge round-trips a synthetic
 volume through the scene.
@@ -195,15 +203,16 @@ does the same thing from any Python that imports `dipy`.)
 
 ## Building the docs
 
-The docs build runs outside Slicer, so this step needs a regular
-Python with the `docs` extra of the bridge package installed:
+The docs build runs outside Slicer:
 
 ```sh
-python -m pip install -e './kwneuro_slicer_bridge[docs]'
+python -m pip install sphinx sphinx-autoapi myst-parser sphinx-copybutton furo
 python -m sphinx -n -T docs docs/_build/html
 ```
 
-Open `docs/_build/html/index.html` to view the site.
+Open `docs/_build/html/index.html` to view the site. The bridge
+package is no longer pip-installable, but `sphinx-autoapi` reads
+the `.py` source files directly so no install is needed for it.
 
 ## License
 

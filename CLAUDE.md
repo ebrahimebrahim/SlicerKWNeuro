@@ -38,18 +38,30 @@ followed by abnormal Slicer exit. Reads from VTK image data from
 another thread can be OK *if* nothing concurrent writes; writes
 never are.
 
-### Bridge is a separately-installable pip package
+### Bridge is bundled as a Slicer-style "library module"
 
-`kwneuro_slicer_bridge/` lives alongside the scripted modules but
-is shipped as its own `pyproject.toml`. `KWNeuroEnvironment` pip-
-installs it into Slicer's Python at first-run time from its local
-path; the module's `pyproject.toml` pulls `kwneuro` itself via a
-git-ref pin (currently the head of the `allow-custom-metadata` PR
-on kwneuro — flip to `@main` once that PR merges).
+`kwneuro_slicer_bridge/` lives alongside the scripted modules and is
+built via the same `slicerMacroBuildScriptedModule` machinery — see
+its `CMakeLists.txt`. The trick (borrowed from
+[SlicerOpenLIFU's OpenLIFULib](https://github.com/OpenwaterHealth/SlicerOpenLIFU/blob/main/OpenLIFULib/CMakeLists.txt))
+is to declare an empty top-level `__init__.py` as the `MODULE_PYTHON_SCRIPTS`
+entry — Slicer's loader looks for a class named `kwneuro_slicer_bridge`,
+doesn't find one, and silently doesn't surface this as a user-facing
+module. The actual Python package lives one directory deeper at
+`kwneuro_slicer_bridge/kwneuro_slicer_bridge/` and is reachable via
+plain `import kwneuro_slicer_bridge` because Slicer adds
+`qt-scripted-modules/` to `sys.path` at startup.
 
-Scripted modules import with `from kwneuro_slicer_bridge import ...`.
-The Python interactor and SlicerJupyter notebook see the same
-imports without sys.path tricks.
+This pattern means the bridge gets the exact same per-file build-tree
+copy + install + CPack registration as the scripted modules. No
+custom CMake plumbing, and the bridge ships in the packaged extension
+automatically.
+
+Consequence: there's no pip install of the bridge anywhere.
+`KWNeuroEnvironment.ensure_kwneuro_installed` only handles the
+external `kwneuro` library now (pip-installed from its git ref).
+Scripted modules import with `from kwneuro_slicer_bridge import ...`,
+the Python interactor and SlicerJupyter notebooks do the same.
 
 ### `InSceneDwi` / `InSceneDti` subclass kwneuro's `Dwi` / `Dti`
 
@@ -107,7 +119,7 @@ with gradients + b-values attached.
 
 `slicer.util.arrayFromVolume` returns arrays in slice-row-column
 (KJI) order. `kwneuro` and `nibabel` use (x, y, z) = IJK. Bridge
-conversions in `kwneuro_slicer_bridge/src/kwneuro_slicer_bridge/conversions.py`
+conversions in `kwneuro_slicer_bridge/kwneuro_slicer_bridge/conversions.py`
 handle this — specifically `vtk_image_to_numpy` does
 `reshape(..., order="F")` so axis 0 is `i`.
 
@@ -297,7 +309,7 @@ slicer-extn/
 ├── KWNeuroRegister/                # ANTs registration
 ├── KWNeuroTemplate/                # ANTs template building
 ├── KWNeuroHarmonize/               # ComBat (extra: combat)
-├── kwneuro_slicer_bridge/          # pip-installable bridge package
+├── kwneuro_slicer_bridge/          # bundled bridge package (built like a module)
 ├── docs/                           # Sphinx site (user-facing)
 └── notebooks/                      # SlicerJupyter walkthroughs
 ```

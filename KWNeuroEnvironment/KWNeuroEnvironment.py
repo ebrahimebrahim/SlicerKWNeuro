@@ -1,16 +1,19 @@
 """KWNeuroEnvironment — install status panel for the KWNeuro extension.
 
 Provides a simple UI in 3D Slicer for inspecting and managing the Python
-environment that the KWNeuro extension depends on: `kwneuro` itself, the
-`kwneuro_slicer_bridge` package, and the four kwneuro optional extras
-(`hdbet`, `noddi`, `tractseg`, `combat`).
+environment that the KWNeuro extension depends on: `kwneuro` itself and
+the four kwneuro optional extras (`hdbet`, `noddi`, `tractseg`, `combat`).
 
 Design notes:
 
-* The bridge package is pip-installed from its absolute location inside
-  this extension repo. That call also pulls in `kwneuro` (via the
-  `git+...@main` pin in the bridge's pyproject.toml) on first-time setup.
-* Each extra is installed separately via `slicer.packaging.pip_install`,
+* The `kwneuro_slicer_bridge` package ships *bundled with this extension*
+  (it sits in the same `qt-scripted-modules/` directory as the modules),
+  so no install step is needed for the bridge — it's importable from the
+  moment Slicer loads the extension. The Install / Update button only
+  needs to ensure `kwneuro` itself is on Slicer's Python path.
+* `kwneuro` is installed straight from its main branch on GitHub. If a
+  PyPI release becomes available, swap the spec.
+* Each optional extra is installed separately via `slicer.packaging.pip_install`,
   hard-coded with the package spec kwneuro's own pyproject.toml declares
   for that extra. TractSeg uses `skip_packages=["fury"]` to preserve
   Slicer's bundled VTK — installing fury would drag in a second,
@@ -24,7 +27,6 @@ from __future__ import annotations
 
 import importlib.metadata
 import logging
-from pathlib import Path
 from typing import Callable
 
 import slicer
@@ -38,10 +40,10 @@ from slicer.ScriptedLoadableModule import (
 )
 
 
-# Absolute path to the bridge package alongside this module. `pip_install`
-# on this path triggers pip to build + install the bridge, pulling in
-# `kwneuro` via the pyproject.toml `git+...@<ref>` pin.
-BRIDGE_PATH = Path(__file__).resolve().parent.parent / "kwneuro_slicer_bridge"
+# Pip spec used by the Install / Update button. Tracks kwneuro main
+# directly; cut over to a tagged release once kwneuro starts publishing
+# them again.
+KWNEURO_PIP_SPEC = "kwneuro @ git+https://github.com/KitwareMedical/kwneuro@main"
 
 
 # Per-extra install specifications. Each "packages" list is the concrete
@@ -91,8 +93,9 @@ class KWNeuroEnvironment(ScriptedLoadableModule):
         self.parent.contributors = ["Ebrahim Ebrahim (Kitware, Inc.)"]
         self.parent.helpText = _(
             "Install-status panel for the KWNeuro extension. Manages the "
-            "kwneuro library, the kwneuro_slicer_bridge package, and the "
-            "four optional kwneuro extras (hdbet, noddi, tractseg, combat)."
+            "kwneuro library and the four optional kwneuro extras "
+            "(hdbet, noddi, tractseg, combat). The kwneuro_slicer_bridge "
+            "package is bundled with the extension and needs no install."
         )
         self.parent.acknowledgementText = _(
             "Developed at Kitware, Inc. as part of the brain microstructure "
@@ -122,14 +125,6 @@ class KWNeuroEnvironmentLogic(ScriptedLoadableModuleLogic):
             return None
 
     @staticmethod
-    def installed_bridge_version() -> str | None:
-        """Return the installed kwneuro_slicer_bridge version, or None."""
-        try:
-            return importlib.metadata.version("kwneuro_slicer_bridge")
-        except importlib.metadata.PackageNotFoundError:
-            return None
-
-    @staticmethod
     def extras_status() -> dict[str, bool]:
         """For each extra, probe-import its marker module and report presence."""
         import importlib.util
@@ -142,25 +137,25 @@ class KWNeuroEnvironmentLogic(ScriptedLoadableModuleLogic):
     # --- Install / uninstall -------------------------------------------------
 
     @staticmethod
-    def ensure_bridge_installed(
+    def ensure_kwneuro_installed(
         log_callback: Callable[[str], None] | None = None,
     ) -> None:
-        """Install the kwneuro_slicer_bridge package from its local path.
+        """Pip-install (or upgrade) the kwneuro library into Slicer's Python.
 
-        Pip-installs `kwneuro_slicer_bridge` from `BRIDGE_PATH`. The
-        package's pyproject.toml pins `kwneuro @ git+...` as a
-        dependency, so pip will also fetch kwneuro from that ref on
-        first-time setup (or skip it if kwneuro is already installed).
+        ``KWNEURO_PIP_SPEC`` pins the install source — currently the
+        ``main`` branch of the upstream kwneuro repo. Re-clicking
+        Install / Update after kwneuro main moves picks up the latest
+        commit.
         """
         import slicer.packaging
 
-        msg = f"Installing kwneuro_slicer_bridge from {BRIDGE_PATH}"
+        msg = f"Installing / updating kwneuro: {KWNEURO_PIP_SPEC}"
         logging.info(msg)
         if log_callback is not None:
             log_callback(msg)
 
         slicer.packaging.pip_install(
-            [str(BRIDGE_PATH)],
+            [KWNEURO_PIP_SPEC],
             requester="KWNeuroEnvironment",
         )
 
@@ -201,11 +196,13 @@ class KWNeuroEnvironmentLogic(ScriptedLoadableModuleLogic):
     def verify_setup() -> tuple[bool, str]:
         """Run a minimal bridge round-trip. Returns (passed, human-readable message).
 
-        Checks: kwneuro imports, kwneuro_slicer_bridge imports, a synthetic
-        3D volume survives a round-trip through `InSceneVolumeResource`.
-        A failure here means the environment is not ready for the rest of
-        the KWNeuro extension to work; re-run Install / Update, or consult
-        the error message.
+        Checks: kwneuro imports, kwneuro_slicer_bridge imports (the bridge
+        is bundled with the extension, so this confirms the
+        qt-scripted-modules/ path is wired up), a synthetic 3D volume
+        survives a round-trip through `InSceneVolumeResource`. A failure
+        here means the environment is not ready for the rest of the
+        KWNeuro extension to work; re-run Install / Update for the
+        kwneuro half, or consult the error message.
         """
         try:
             import numpy as np
@@ -255,7 +252,9 @@ class KWNeuroEnvironmentWidget(ScriptedLoadableModuleWidget):
 
         self.logic = KWNeuroEnvironmentLogic()
 
-        self.ui.installBridgeButton.connect("clicked(bool)", self.onInstallBridgeClicked)
+        self.ui.installKwneuroButton.connect(
+            "clicked(bool)", self.onInstallKwneuroClicked,
+        )
         self.ui.verifySetupButton.connect("clicked(bool)", self.onVerifySetupClicked)
 
         for name in EXTRAS_INSTALL_SPEC:
@@ -273,9 +272,7 @@ class KWNeuroEnvironmentWidget(ScriptedLoadableModuleWidget):
     def refresh(self) -> None:
         """Populate UI labels and checkboxes from current install state."""
         kwneuro_ver = self.logic.installed_kwneuro_version()
-        bridge_ver = self.logic.installed_bridge_version()
         self.ui.kwneuroVersionLabel.text = kwneuro_ver or "(not installed)"
-        self.ui.bridgeVersionLabel.text = bridge_ver or "(not installed)"
 
         status = self.logic.extras_status()
         for name, installed in status.items():
@@ -286,11 +283,11 @@ class KWNeuroEnvironmentWidget(ScriptedLoadableModuleWidget):
             checkbox.checked = installed
             checkbox.blockSignals(was_blocking)
 
-    def onInstallBridgeClicked(self) -> None:
+    def onInstallKwneuroClicked(self) -> None:
         with slicer.util.tryWithErrorDisplay(
-            _("Failed to install kwneuro_slicer_bridge."), waitCursor=True,
+            _("Failed to install / update kwneuro."), waitCursor=True,
         ):
-            self.logic.ensure_bridge_installed()
+            self.logic.ensure_kwneuro_installed()
             self.refresh()
 
     def onVerifySetupClicked(self) -> None:
@@ -330,7 +327,6 @@ class KWNeuroEnvironmentTest(ScriptedLoadableModuleTest):
         self.delayDisplay("Starting KWNeuroEnvironment logic smoke test")
         logic = KWNeuroEnvironmentLogic()
         _ = logic.installed_kwneuro_version()
-        _ = logic.installed_bridge_version()
         status = logic.extras_status()
         assert set(status) == set(EXTRAS_INSTALL_SPEC)
         for value in status.values():

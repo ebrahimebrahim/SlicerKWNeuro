@@ -46,7 +46,7 @@
         <item row="1" column="1">
          <widget class="QLabel" name="bridgeVersionLabel">
           <property name="text">
-           <string>(not installed)</string>
+           <string>bundled with this extension</string>
           </property>
           <property name="textInteractionFlags">
            <set>Qt::TextSelectableByMouse</set>
@@ -93,12 +93,12 @@
        </widget>
       </item>
       <item>
-       <widget class="QPushButton" name="installBridgeButton">
+       <widget class="QPushButton" name="installKwneuroButton">
         <property name="text">
-         <string>Install / Update kwneuro + bridge</string>
+         <string>Install / Update kwneuro</string>
         </property>
         <property name="toolTip">
-         <string>pip-installs kwneuro_slicer_bridge from this extension; the bridge's pyproject.toml also pulls in kwneuro from its pinned git ref. Also re-runs whenever extras toggles above change their install state.</string>
+         <string>pip-installs (or upgrades) the kwneuro library from its pinned git ref into Slicer's bundled Python. The kwneuro_slicer_bridge package is shipped with this extension and needs no install — it is reachable from any Slicer session that has the extension loaded.</string>
         </property>
        </widget>
       </item>

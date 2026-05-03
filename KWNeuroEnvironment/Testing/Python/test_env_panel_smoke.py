@@ -21,24 +21,25 @@ class TestKWNeuroEnvironmentSmoke(unittest.TestCase):
 
         logic = KWNeuroEnvironment.KWNeuroEnvironmentLogic()
         kwneuro_ver = logic.installed_kwneuro_version()
-        bridge_ver = logic.installed_bridge_version()
         self.assertTrue(kwneuro_ver is None or isinstance(kwneuro_ver, str))
-        self.assertTrue(bridge_ver is None or isinstance(bridge_ver, str))
 
         status = logic.extras_status()
         self.assertEqual(set(status), set(KWNeuroEnvironment.EXTRAS_INSTALL_SPEC))
         for name, value in status.items():
             self.assertIsInstance(value, bool, f"extras_status[{name!r}] must be bool")
 
-    def test_verify_setup_passes_when_bridge_installed(self) -> None:
-        """If kwneuro + bridge are installed, verify_setup should pass."""
+    def test_verify_setup_passes_when_kwneuro_installed(self) -> None:
+        """If kwneuro is installed, verify_setup should pass.
+
+        The bridge ships bundled with the extension, so its presence is
+        guaranteed at this point — no need to gate on it. Only the
+        external kwneuro library needs an install check.
+        """
         import KWNeuroEnvironment
 
         logic = KWNeuroEnvironment.KWNeuroEnvironmentLogic()
         if logic.installed_kwneuro_version() is None:
             self.skipTest("kwneuro not installed; skipping verify_setup")
-        if logic.installed_bridge_version() is None:
-            self.skipTest("kwneuro_slicer_bridge not installed; skipping verify_setup")
 
         passed, message = logic.verify_setup()
         self.assertTrue(passed, f"verify_setup failed: {message}")

@@ -4,13 +4,14 @@ A 3D Slicer extension that brings the
 [kwneuro](https://github.com/KitwareMedical/kwneuro) diffusion-MRI
 library into Slicer. Ships:
 
-- A pip-installable Python package `kwneuro_slicer_bridge` with
-  scene-backed resource classes (`InSceneVolumeResource`,
-  `InSceneDwi`, `InSceneDti`, `InSceneTransformResource`) that let
-  kwneuro values live as MRML nodes and, where meaningful, subclass
-  kwneuro's own `Dwi` / `Dti` / `VolumeResource` directly — so any
-  kwneuro pipeline function accepts a scene-backed resource without
-  a conversion step.
+- A bundled Python package `kwneuro_slicer_bridge` (ships with the
+  extension; reachable via plain `import kwneuro_slicer_bridge` from
+  any Slicer Python session) exposing scene-backed resource classes
+  (`InSceneVolumeResource`, `InSceneDwi`, `InSceneDti`,
+  `InSceneTransformResource`) that let kwneuro values live as MRML
+  nodes and, where meaningful, subclass kwneuro's own `Dwi` /
+  `Dti` / `VolumeResource` directly — so any kwneuro pipeline
+  function accepts a scene-backed resource without a conversion step.
 - Eleven scripted modules covering the standard DWI workflow:
   environment management (`KWNeuroEnvironment`), import
   (`KWNeuroImporter`), brain extraction, denoising, DTI, CSD, NODDI,
@@ -33,8 +34,9 @@ API Reference <autoapi/index>
 
 ## What's here
 
-- **{doc}`getting-started`** — install the extension + bridge, run
-  Verify setup, use the bridge from the Slicer Python interactor.
+- **{doc}`getting-started`** — load the extension, install kwneuro
+  via the environment panel, run Verify setup, use the bridge from
+  the Slicer Python interactor.
 - **{doc}`bridge-reference`** — architectural notes on the bridge
   classes and design decisions.
 - **{doc}`Tutorials <tutorials/index>`** — hand-written walkthrough

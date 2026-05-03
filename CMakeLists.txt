@@ -17,6 +17,13 @@ find_package(Slicer REQUIRED)
 include(${Slicer_USE_FILE})
 
 #-----------------------------------------------------------------------------
+# Bundled Python package — not a real scripted module, just a library
+# of bridge classes that the scripted modules import. Goes through
+# slicerMacroBuildScriptedModule so it ships in the build tree and
+# CPack package alongside the modules.
+add_subdirectory(kwneuro_slicer_bridge)
+
+#-----------------------------------------------------------------------------
 # Extension modules
 add_subdirectory(KWNeuroEnvironment)
 add_subdirectory(KWNeuroImporter)
