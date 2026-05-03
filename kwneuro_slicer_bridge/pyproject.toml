@@ -29,11 +29,8 @@ classifiers = [
 ]
 version = "0.0.1"
 dependencies = [
-  # Pinned to the head of the `allow-custom-metadata` draft PR
-  # (KitwareMedical/kwneuro#137). This PR teaches `update_volume_metadata`
-  # to preserve non-NIfTI keys, which the bridge relies on. Once the PR
-  # merges to kwneuro's main branch, flip this pin back to `@main`.
-  "kwneuro @ git+https://github.com/KitwareMedical/kwneuro@4702266fe7e0a76c63c27b3677badbe0a96dcae7",
+  # Cut over to a tagged release once kwneuro starts publishing them again.
+  "kwneuro @ git+https://github.com/KitwareMedical/kwneuro@main",
   "numpy",
   # vtk and slicer intentionally not declared — they come from 3D Slicer's
   # bundled Python environment. Importing this package outside Slicer will
