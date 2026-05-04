@@ -1,5 +1,6 @@
-- THe output of KWNeuro TractSeg should be a slicer segmentation rather the a many-channel volume.
+- TractSeg result on the example data looks terrible...
 - Once https://github.com/KitwareMedical/kwneuro/pull/143 is merged: Get rid of the monkey patch in KWNeuro brain extract and use the parameter instead.
 - Once https://github.com/KitwareMedical/kwneuro/pull/139 is merged: Study it and see what features need to be added to the extension. Import structural volume from disk make sense to add?? Definitely at least a bridge thing for structural volumes though. ANd then modules for the various things that have been added for structural volume processing?
 - Add to core slicer extn manager a "install from repo" utility so we can point to the KWNeuro extn with it. Rather than putting it on extn index.
 - Markdown in tooltips does not work... it seems claude generated a lot of it. Also: confirm the truthfulness of what's reported in all tooltips
+- Advertise this extension in the kwneuro docs. Give it a dedicated docs page in the kwneuro docs as well, perhaps with some screenshots or a guide to trying it out quickly with sample data.
