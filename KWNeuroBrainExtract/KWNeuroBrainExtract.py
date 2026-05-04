@@ -13,6 +13,7 @@ node is added on the main thread.
 """
 from __future__ import annotations
 
+import contextlib
 import logging
 import tempfile
 from pathlib import Path
@@ -27,6 +28,67 @@ from slicer.ScriptedLoadableModule import (
     ScriptedLoadableModuleTest,
     ScriptedLoadableModuleWidget,
 )
+
+
+@contextlib.contextmanager
+def _patch_nnunet_to_avoid_multiprocessing() -> Any:
+    """Route nnunetv2's prediction through its sequential code path.
+
+    nnunetv2 (used inside HD-BET) defaults to spinning up a
+    ``multiprocessing.Manager`` and a ``multiprocessing.Pool`` with
+    the spawn context. In Slicer those spawned children try to
+    recreate the parent's ``__main__`` by re-running ``slicerqt.py``,
+    which references ``_qSlicerCoreApplicationInstance`` — a name
+    only defined inside the main Slicer process. The children crash
+    with ``NameError`` and the parent sees ``EOFError`` from the
+    Manager pipe.
+
+    nnunetv2 ships a ``predict_from_files_sequential`` method that
+    does the same work without any multiprocessing, intended for
+    "Slow, but sometimes necessary" environments. We monkey-patch
+    ``predict_from_files`` on its predictor class to call that
+    instead, then restore on exit. This is a workaround pending an
+    upstream kwneuro change to expose a "sequential" flag.
+    """
+    try:
+        from nnunetv2.inference.predict_from_raw_data import nnUNetPredictor
+    except ImportError:
+        yield
+        return
+
+    if not hasattr(nnUNetPredictor, "predict_from_files_sequential"):
+        # Older nnunetv2 without the sequential path — fall back to
+        # the no-op and let the original error surface.
+        yield
+        return
+
+    original = nnUNetPredictor.predict_from_files
+
+    def _sequential_shim(
+        self: Any,
+        list_of_lists_or_source_folder: Any,
+        output_folder_or_list_of_truncated_output_files: Any,
+        save_probabilities: bool = False,
+        overwrite: bool = True,
+        num_processes_preprocessing: int = 0,  # ignored — sequential
+        num_processes_segmentation_export: int = 0,  # ignored — sequential
+        folder_with_segs_from_prev_stage: Any = None,
+        num_parts: int = 1,
+        part_id: int = 0,
+    ) -> Any:
+        return self.predict_from_files_sequential(
+            list_of_lists_or_source_folder=list_of_lists_or_source_folder,
+            output_folder_or_list_of_truncated_output_files=output_folder_or_list_of_truncated_output_files,
+            save_probabilities=save_probabilities,
+            overwrite=overwrite,
+            folder_with_segs_from_prev_stage=folder_with_segs_from_prev_stage,
+        )
+
+    nnUNetPredictor.predict_from_files = _sequential_shim
+    try:
+        yield
+    finally:
+        nnUNetPredictor.predict_from_files = original
 
 
 #
@@ -95,7 +157,8 @@ class KWNeuroBrainExtractLogic(ScriptedLoadableModuleLogic):
         with tempfile.TemporaryDirectory(prefix="kwneuro_bet_") as tmp:
             output_path = Path(tmp) / "brainmask.nii.gz"
             logging.info("KWNeuroBrainExtract: running HD-BET -> %s", output_path)
-            mask_resource = brain_extract_single(dwi, output_path)
+            with _patch_nnunet_to_avoid_multiprocessing():
+                mask_resource = brain_extract_single(dwi, output_path)
             return mask_resource.load()
 
     def publish_to_scene(self, mask_resource: Any, base_name: str) -> str:

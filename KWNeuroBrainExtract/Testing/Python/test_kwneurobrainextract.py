@@ -220,6 +220,73 @@ class TestKWNeuroBrainExtractLogic(unittest.TestCase):
         with self.assertRaises(ValueError):
             logic.prepare_inputs(None)
 
+    def test_real_hdbet_end_to_end(self) -> None:
+        """Run the actual HD-BET pipeline on cached Sherbrooke 3-shell.
+
+        Skips cleanly if either the ``hdbet`` extra isn't installed or
+        the Sherbrooke dataset isn't cached locally — this is a
+        heavy, opt-in test, not an always-on CI test. Its purpose is
+        to catch integration bugs that the mocked
+        ``test_run_brain_extract_with_mocked_hdbet`` cannot, such as
+        the multiprocessing + slicerqt collision that escaped review
+        in 2026-05.
+
+        Asserts:
+          * Mask is a 3D ``vtkMRMLLabelMapVolumeNode`` with the same
+            spatial shape as the DWI.
+          * Mask is binary (0 / 1 only).
+          * Brain voxels actually got segmented — at least 5% but no
+            more than 60% of the volume is positive (Sherbrooke
+            HARDI193 has a clear brain in the middle of a 128x128x60
+            grid).
+        """
+        import importlib.util
+        from pathlib import Path
+
+        import slicer
+
+        if importlib.util.find_spec("HD_BET") is None:
+            self.skipTest("hdbet extra is not installed; skipping real run")
+        sherbrooke = Path.home() / ".dipy" / "sherbrooke_3shell"
+        if not (sherbrooke / "HARDI193.nii.gz").exists():
+            self.skipTest(
+                f"Sherbrooke not cached at {sherbrooke}; click "
+                "'Load Sherbrooke 3-shell' in KWNeuroImporter once.",
+            )
+
+        from kwneuro_slicer_bridge import InSceneVolumeResource
+        from KWNeuroBrainExtract import KWNeuroBrainExtractLogic
+        from KWNeuroImporter import KWNeuroImporterLogic
+
+        dwi_id = KWNeuroImporterLogic().load_sherbrooke(name="HARDI193_real_bet")
+        dwi_node = slicer.mrmlScene.GetNodeByID(dwi_id)
+
+        mask_id = KWNeuroBrainExtractLogic().process(dwi_node)
+        mask_node = slicer.mrmlScene.GetNodeByID(mask_id)
+        self.assertEqual(mask_node.GetClassName(), "vtkMRMLLabelMapVolumeNode")
+
+        mask_arr = InSceneVolumeResource.from_node(mask_node).get_array()
+        self.assertEqual(
+            mask_arr.shape, (128, 128, 60),
+            f"Mask shape {mask_arr.shape} does not match Sherbrooke spatial dims",
+        )
+        unique_vals = set(np.unique(mask_arr).tolist())
+        self.assertTrue(
+            unique_vals <= {0, 1},
+            f"Mask contains values other than 0/1: {sorted(unique_vals)}",
+        )
+        positive_fraction = float(np.mean(mask_arr > 0))
+        self.assertGreater(
+            positive_fraction, 0.05,
+            f"Only {positive_fraction:.1%} of voxels are positive — "
+            "HD-BET likely failed to find a brain.",
+        )
+        self.assertLess(
+            positive_fraction, 0.6,
+            f"{positive_fraction:.1%} of voxels are positive — "
+            "HD-BET likely segmented the entire FOV, not just the brain.",
+        )
+
 
 class TestKWNeuroBrainExtractWidget(unittest.TestCase):
     def setUp(self) -> None:
