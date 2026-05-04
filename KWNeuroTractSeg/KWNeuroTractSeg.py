@@ -1,8 +1,17 @@
 """KWNeuroTractSeg - run TractSeg on a DWI + brain mask.
 
 Wraps ``kwneuro.tractseg.extract_tractseg``. Output depends on
-``output_type`` — a 4D volume whose last dim is 72 (tract_segmentation),
-144 (endings_segmentation), or 60 (TOM) components.
+``output_type``:
+
+* ``tract_segmentation`` (default): 72 binary bundle masks published
+  as a single ``vtkMRMLSegmentationNode`` with one named segment per
+  bundle (e.g. ``AF_left``, ``CST_right``, ...).
+* ``endings_segmentation``: 144 binary masks (each of the 72 bundles
+  has a ``_b`` begin and ``_e`` end region), published as a single
+  ``vtkMRMLSegmentationNode``.
+* ``TOM``: 60-component vector volume (20 tracts × xyz orientation)
+  published as a single ``vtkMRMLVectorVolumeNode``. Vector data
+  doesn't fit a segmentation; this stays as a multi-component volume.
 
 Requires kwneuro[tractseg]; also strongly benefits from a CUDA GPU.
 """
@@ -20,6 +29,27 @@ from slicer.ScriptedLoadableModule import (
     ScriptedLoadableModuleTest,
     ScriptedLoadableModuleWidget,
 )
+
+
+def _bundle_names_72() -> tuple[str, ...]:
+    """The 72 TractSeg "All" bundle names in component order.
+
+    Defers the ``tractseg`` import so opening this module doesn't
+    require the heavy ``kwneuro[tractseg]`` extra. Called at
+    publish-to-scene time, when the extra is guaranteed present
+    (``prepare_inputs`` has already gated on it).
+    """
+    from tractseg.data.dataset_specific_utils import get_bundle_names
+    # get_bundle_names returns ``("background", *72 bundles)``; drop the
+    # background entry so indexes line up with TractSeg's per-channel
+    # output (channel i corresponds to bundle i).
+    return tuple(get_bundle_names("All")[1:])
+
+
+def _endpoint_names_144() -> tuple[str, ...]:
+    """The 144 TractSeg "All_endpoints" names in component order."""
+    from tractseg.data.dataset_specific_utils import get_bundle_names
+    return tuple(get_bundle_names("All_endpoints")[1:])
 
 
 class KWNeuroTractSeg(ScriptedLoadableModule):
@@ -89,19 +119,116 @@ class KWNeuroTractSegLogic(ScriptedLoadableModuleLogic):
     def publish_to_scene(
         self, tract_volume: Any, base_name: str, output_type: str,
     ) -> str:
-        """Publish the 4D tract-seg volume. **Main thread only.**"""
+        """Publish the TractSeg result to the scene. **Main thread only.**
+
+        For binary-mask outputs (``tract_segmentation`` and
+        ``endings_segmentation``) returns the ID of a
+        ``vtkMRMLSegmentationNode`` whose segments are named after the
+        TractSeg bundle list. For the ``TOM`` vector-field output
+        returns the ID of a ``vtkMRMLVectorVolumeNode`` (vector data
+        doesn't map cleanly to a segmentation).
+        """
+        if output_type == "tract_segmentation":
+            return self._publish_segmentation(
+                tract_volume,
+                node_name=f"{base_name}_tractseg",
+                segment_names=_bundle_names_72(),
+            )
+        if output_type == "endings_segmentation":
+            return self._publish_segmentation(
+                tract_volume,
+                node_name=f"{base_name}_tractseg_endings",
+                segment_names=_endpoint_names_144(),
+            )
+        if output_type == "TOM":
+            return self._publish_vector_volume(
+                tract_volume, node_name=f"{base_name}_tractseg_tom",
+            )
+        msg = f"Unsupported output_type {output_type!r} in publish_to_scene"
+        raise ValueError(msg)
+
+    def _publish_vector_volume(self, tract_volume: Any, node_name: str) -> str:
         from kwneuro_slicer_bridge import InSceneVolumeResource
 
-        suffix = {
-            "tract_segmentation": "tractseg",
-            "endings_segmentation": "tractseg_endings",
-            "TOM": "tractseg_tom",
-        }[output_type]
-        svr = InSceneVolumeResource.from_resource(
-            tract_volume, name=f"{base_name}_{suffix}",
-        )
+        svr = InSceneVolumeResource.from_resource(tract_volume, name=node_name)
         svr.get_node().CreateDefaultDisplayNodes()
         return svr.node_id
+
+    @staticmethod
+    def _publish_segmentation(
+        tract_volume: Any,
+        *,
+        node_name: str,
+        segment_names: tuple[str, ...],
+    ) -> str:
+        """Build a vtkMRMLSegmentationNode with one segment per channel.
+
+        ``tract_volume`` is a kwneuro VolumeResource holding a 4D
+        ``(x, y, z, n)`` array of binary masks. We add ``n`` named
+        segments to a single segmentation node, sharing the input's
+        IJK-to-RAS geometry. The names map positionally onto channels
+        so the caller is responsible for passing the right list for
+        the output_type at hand.
+        """
+        import vtkSegmentationCorePython as vtkSegmentationCore
+
+        from kwneuro_slicer_bridge.conversions import (
+            affine_to_ijk_to_ras_matrix,
+            numpy_to_vtk_image,
+        )
+
+        arr = tract_volume.get_array()
+        if arr.ndim != 4:
+            msg = (
+                f"Expected 4D array for segmentation publishing, "
+                f"got shape {arr.shape}"
+            )
+            raise ValueError(msg)
+        n_channels = arr.shape[-1]
+        if n_channels != len(segment_names):
+            msg = (
+                f"Channel count mismatch: array has {n_channels} "
+                f"channels but {len(segment_names)} segment names "
+                f"were provided."
+            )
+            raise ValueError(msg)
+        affine = tract_volume.get_affine()
+        ijk_to_ras = affine_to_ijk_to_ras_matrix(affine)
+        labelmap_repr_name = (
+            vtkSegmentationCore.vtkSegmentationConverter.
+            GetSegmentationBinaryLabelmapRepresentationName()
+        )
+
+        seg_node = slicer.mrmlScene.AddNewNodeByClass(
+            "vtkMRMLSegmentationNode", node_name,
+        )
+        try:
+            seg_node.CreateDefaultDisplayNodes()
+            # The segmentation needs a labelmap representation declared
+            # before we add segments, otherwise AddSegment silently
+            # drops the labelmap data we attach.
+            seg_node.GetSegmentation().SetMasterRepresentationName(labelmap_repr_name)
+
+            for i, name in enumerate(segment_names):
+                binary = (arr[..., i] > 0).astype("uint8")
+                # Build a vtkOrientedImageData carrying the binary
+                # mask AND the IJK-to-RAS geometry. Adding via
+                # vtkSegment.AddRepresentation guarantees one
+                # segment per channel, even when the channel is
+                # all-zero (which Slicer's labelmap-import path
+                # would otherwise drop).
+                oriented = vtkSegmentationCore.vtkOrientedImageData()
+                oriented.DeepCopy(numpy_to_vtk_image(binary))
+                oriented.SetGeometryFromImageToWorldMatrix(ijk_to_ras)
+
+                segment = vtkSegmentationCore.vtkSegment()
+                segment.SetName(name)
+                segment.AddRepresentation(labelmap_repr_name, oriented)
+                seg_node.GetSegmentation().AddSegment(segment, name)
+        except BaseException:
+            slicer.mrmlScene.RemoveNode(seg_node)
+            raise
+        return seg_node.GetID()
 
     def process(
         self,

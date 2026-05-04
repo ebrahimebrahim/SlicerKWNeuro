@@ -35,6 +35,33 @@ def _synthetic_dwi():
     )
 
 
+def _segment_voxel_count(segment) -> int:
+    """Count positive voxels in a segment's binary labelmap representation.
+
+    Empty segments have a degenerate or zero-valued labelmap; this
+    distinguishes "channel had positive voxels" from "channel was all
+    zero" in the tract-seg test.
+    """
+    import vtkSegmentationCorePython as vtkSegmentationCore
+
+    labelmap_repr_name = (
+        vtkSegmentationCore.vtkSegmentationConverter.
+        GetSegmentationBinaryLabelmapRepresentationName()
+    )
+    labelmap = segment.GetRepresentation(labelmap_repr_name)
+    if labelmap is None:
+        return 0
+    extent = labelmap.GetExtent()
+    nx = extent[1] - extent[0] + 1
+    ny = extent[3] - extent[2] + 1
+    nz = extent[5] - extent[4] + 1
+    if nx <= 0 or ny <= 0 or nz <= 0:
+        return 0
+    from vtk.util import numpy_support
+    arr = numpy_support.vtk_to_numpy(labelmap.GetPointData().GetScalars())
+    return int((arr > 0).sum())
+
+
 def _synthetic_mask():
     from kwneuro.resource import InMemoryVolumeResource
     return InMemoryVolumeResource(
@@ -105,32 +132,35 @@ class TestKWNeuroTractSegLogic(unittest.TestCase):
             )
 
     def test_run_tractseg_with_mocked_tractseg(self) -> None:
-        """Mock extract_tractseg; verify wrapping + publish-to-scene.
+        """Mock extract_tractseg; verify wrapping + segmentation publishing.
 
         Checks that:
-          * Our code calls the mock exactly once.
-          * The returned synthetic array propagates through to
-            publish_to_scene and the resulting node has the right
-            name, class, and voxel values.
-
-        A bug that replaced our wrapping with a different tract-seg
-        library call would fail call_count == 1. A bug in
-        publish_to_scene that swapped volumes would fail the value
-        check.
+          * Our code calls the mock exactly once (any rebinding bug
+            would fail this).
+          * The 72-channel binary-mask output is published as a
+            vtkMRMLSegmentationNode with 72 segments, each named
+            after its TractSeg bundle.
+          * Channel values propagate to the right segment: bundle 0
+            ("AF_left") has its binary mask all-positive, bundle 71
+            ("ST_OCC_right") similarly, and a marked-empty channel
+            stays empty.
         """
         import kwneuro.tractseg as tractseg_mod
         import slicer
 
         from kwneuro.resource import InMemoryVolumeResource
-        from kwneuro_slicer_bridge import InSceneVolumeResource
-        from KWNeuroTractSeg import KWNeuroTractSegLogic
+        from KWNeuroTractSeg import KWNeuroTractSegLogic, _bundle_names_72
 
         nx, ny, nz = 5, 5, 5
         n_bundles = 72
         fake_array = np.zeros((nx, ny, nz, n_bundles), dtype=np.float32)
-        # Mark bundle 0 with a distinct value so we can verify propagation.
-        fake_array[..., 0] = 1.0
-        fake_array[..., 1] = 2.0
+        # Mark a few channels with distinct, recognisable patterns so
+        # we can verify they land on the right segments.
+        fake_array[..., 0] = 1.0  # AF_left — full-volume positive
+        fake_array[..., 71] = 1.0  # ST_OCC_right — full-volume positive
+        # Channel 1 (AF_right) stays all-zero so we can verify empty
+        # segments survive intact.
+
         fake_volume = InMemoryVolumeResource(
             fake_array, np.diag([2.0, 3.0, 4.0, 1.0]), {},
         )
@@ -165,20 +195,54 @@ class TestKWNeuroTractSegLogic(unittest.TestCase):
 
         node = slicer.mrmlScene.GetNodeByID(node_id)
         self.assertEqual(node.GetName(), "tractseg_test_tractseg")
-        # 4D array -> vtkMRMLVectorVolumeNode via the bridge.
-        self.assertEqual(node.GetClassName(), "vtkMRMLVectorVolumeNode")
+        self.assertEqual(node.GetClassName(), "vtkMRMLSegmentationNode")
 
-        # Value propagation: bundle 0 should be all 1.0, bundle 1 all 2.0.
-        scene_arr = InSceneVolumeResource.from_node(node).get_array()
-        np.testing.assert_allclose(scene_arr[..., 0], 1.0)
-        np.testing.assert_allclose(scene_arr[..., 1], 2.0)
+        seg = node.GetSegmentation()
+        self.assertEqual(
+            seg.GetNumberOfSegments(), 72,
+            "tract_segmentation should produce exactly 72 segments — "
+            "one per TractSeg bundle.",
+        )
 
-    def test_publish_to_scene_names_bind_output_type_to_suffix(self) -> None:
-        """Each output_type must produce its *specific* expected node name.
+        # Segment names must match the TractSeg bundle ordering.
+        actual_names = [
+            seg.GetSegment(seg.GetNthSegmentID(i)).GetName()
+            for i in range(seg.GetNumberOfSegments())
+        ]
+        self.assertEqual(
+            actual_names, list(_bundle_names_72()),
+            "Segment names don't match the TractSeg 'All' bundle list "
+            "in order — channel-to-name mapping is wrong.",
+        )
 
-        A pure length-only check (`len({names}) == 3`) would pass a
-        bug that swapped endings_segmentation <-> TOM suffixes.
-        Pinning the exact mapping makes swap regressions loud.
+        # Value propagation: the AF_left channel was all-positive,
+        # so its segment's binary labelmap must be non-empty. The
+        # AF_right channel was all-zero, so its segment must be empty.
+        af_left_seg = seg.GetSegment(seg.GetSegmentIdBySegmentName("AF_left"))
+        af_right_seg = seg.GetSegment(seg.GetSegmentIdBySegmentName("AF_right"))
+        self.assertIsNotNone(af_left_seg)
+        self.assertIsNotNone(af_right_seg)
+        # GetBinaryLabelmapInternalRepresentation -> vtkOrientedImageData;
+        # a segment with no positive voxels has empty extent.
+        self.assertGreater(
+            _segment_voxel_count(af_left_seg), 0,
+            "AF_left was a full-positive channel; its segment must "
+            "have voxels.",
+        )
+        self.assertEqual(
+            _segment_voxel_count(af_right_seg), 0,
+            "AF_right was all-zero; its segment must be empty.",
+        )
+
+    def test_publish_to_scene_node_names_per_output_type(self) -> None:
+        """Each output_type produces a distinctly-named node and the
+        right MRML class.
+
+        Pins the output-name suffix so a regression that swapped two
+        suffixes would fail loudly. Also asserts that
+        ``tract_segmentation`` / ``endings_segmentation`` go to
+        Segmentation nodes (rather than vector volumes), and that
+        ``TOM`` stays as a vector volume.
         """
         import slicer
 
@@ -186,24 +250,65 @@ class TestKWNeuroTractSegLogic(unittest.TestCase):
         from KWNeuroTractSeg import KWNeuroTractSegLogic
 
         logic = KWNeuroTractSegLogic()
+        affine = np.diag([2.0, 3.0, 4.0, 1.0])
+
+        cases = [
+            (
+                "tract_segmentation",
+                "name_test_dwi_tractseg",
+                "vtkMRMLSegmentationNode",
+                72,
+            ),
+            (
+                "endings_segmentation",
+                "name_test_dwi_tractseg_endings",
+                "vtkMRMLSegmentationNode",
+                144,
+            ),
+            (
+                "TOM",
+                "name_test_dwi_tractseg_tom",
+                "vtkMRMLVectorVolumeNode",
+                60,
+            ),
+        ]
+        for output_type, expected_name, expected_class, n_channels in cases:
+            fake = InMemoryVolumeResource(
+                array=np.zeros((5, 5, 5, n_channels), dtype=np.float32),
+                affine=affine,
+                metadata={},
+            )
+            nid = logic.publish_to_scene(fake, "name_test_dwi", output_type)
+            node = slicer.mrmlScene.GetNodeByID(nid)
+            self.assertEqual(
+                node.GetName(), expected_name,
+                f"publish_to_scene({output_type!r}) produced node "
+                f"{node.GetName()!r}; expected {expected_name!r}.",
+            )
+            self.assertEqual(
+                node.GetClassName(), expected_class,
+                f"publish_to_scene({output_type!r}) produced a "
+                f"{node.GetClassName()}; expected {expected_class}.",
+            )
+
+    def test_publish_segmentation_rejects_channel_count_mismatch(self) -> None:
+        """If TractSeg ever changes its bundle count, publish_to_scene
+        should fail loudly rather than silently mis-name segments."""
+        from kwneuro.resource import InMemoryVolumeResource
+        from KWNeuroTractSeg import KWNeuroTractSegLogic
+
+        logic = KWNeuroTractSegLogic()
+        # 8 channels but tract_segmentation expects 72 — mismatch.
         fake = InMemoryVolumeResource(
             array=np.zeros((5, 5, 5, 8), dtype=np.float32),
             affine=np.diag([2.0, 3.0, 4.0, 1.0]),
             metadata={},
         )
-        expected = {
-            "tract_segmentation": "name_test_dwi_tractseg",
-            "endings_segmentation": "name_test_dwi_tractseg_endings",
-            "TOM": "name_test_dwi_tractseg_tom",
-        }
-        for output_type, expected_name in expected.items():
-            nid = logic.publish_to_scene(fake, "name_test_dwi", output_type)
-            actual = slicer.mrmlScene.GetNodeByID(nid).GetName()
-            self.assertEqual(
-                actual, expected_name,
-                f"publish_to_scene({output_type!r}) produced node name "
-                f"{actual!r}; expected {expected_name!r}.",
-            )
+        with self.assertRaises(ValueError) as ctx:
+            logic.publish_to_scene(fake, "mismatch", "tract_segmentation")
+        msg = str(ctx.exception).lower()
+        self.assertIn("channel", msg)
+        self.assertIn("72", msg)
 
 
 class TestKWNeuroTractSegWidget(unittest.TestCase):
