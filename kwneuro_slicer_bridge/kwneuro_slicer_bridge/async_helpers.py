@@ -1,31 +1,28 @@
 """Async / progress helpers for KWNeuro scripted modules.
 
-Two public entry points, both modelled on Slicer's
-``_pip_install_with_dialog`` / ``_pip_install_nonblocking`` pair
-(``Base/Python/slicer/packaging.py``) and the background-process
-output pattern in ``slicer.util._startAsyncProcessOutputHandling``:
+The pattern is the same as Slicer's ``_pip_install_with_dialog``
+(``Base/Python/slicer/packaging.py``) — show a modal dialog, run the
+work on a background thread, busy-wait on the main thread while
+pumping ``slicer.app.processEvents`` so the UI stays responsive —
+but without an extra ``qt.QTimer`` indirection: the busy-wait polls
+the worker's ``threading.Event`` directly.
 
-- :func:`run_in_worker` — fire-and-forget background work. The worker
-  thread writes its result / exception into a shared handle; a
-  main-thread ``qt.QTimer`` polls the handle and dispatches
-  ``on_complete`` on the main thread. Progress lines that the worker
-  pushes into the returned ``progress_queue`` are likewise drained on
-  the main thread and forwarded to ``on_progress``. No QObject is
-  touched from the worker thread.
+Public entry points:
+
+- :func:`run_in_worker` — fire-and-forget background work. Returns a
+  handle whose ``done_event`` flips once the worker exits; the
+  caller is responsible for waiting / draining its
+  ``progress_queue``. No Qt objects are created.
 - :func:`run_with_progress_dialog` — blocking-from-caller-perspective
-  wrapper that shows a modal :class:`ProgressDialog` and keeps the UI
-  responsive by pumping ``slicer.app.processEvents`` until the worker
-  completes.
+  wrapper that shows a modal :class:`ProgressDialog`, dispatches the
+  callable into a worker thread, and busy-pumps the main event loop
+  until the worker is done. Drains the worker's ``progress_queue``
+  inline so tqdm capture lines stream into the dialog's log.
 
 Plus :func:`ensure_extras_installed`, which probes the
 ``KWNeuroEnvironment`` install-status surface and raises a clear
 "open KWNeuroEnvironment and tick the <extra> checkbox" error if the
 module under the cursor needs an extra that is not installed.
-
-Invariant: ``run_in_worker`` must be called from the main Qt thread
-(the thread that owns ``qt.QTimer`` scheduling). Calling it from
-another thread is not supported and will produce Qt
-"timers can only be used with threads started with QThread" warnings.
 """
 from __future__ import annotations
 
@@ -38,8 +35,6 @@ from dataclasses import dataclass, field
 from typing import Any, Callable, TypeVar
 
 T = TypeVar("T")
-
-_POLL_INTERVAL_MS = 50
 
 # Global lock guarding TqdmToProgressDialog's monkey-patch of dipy's
 # per-submodule tqdm bindings. The patch mutates module-level state
@@ -66,13 +61,13 @@ class WorkerHandle:
 
     Not a cancellation token — the long-running callable runs to
     completion. ``done_event`` flips once the worker has finished
-    (regardless of success / failure). The main-thread poller reads
-    ``result`` / ``exception`` only after ``done_event`` is set.
+    (regardless of success / failure). Read ``result`` /
+    ``exception`` only after ``done_event`` is set.
 
     ``progress_queue`` is the worker-side sink for progress lines.
     Callers who want per-step progress updates push strings into it
-    (directly, or via a tqdm-capture shim installed around ``fn``).
-    The main-thread poller drains it and invokes ``on_progress``.
+    (directly, or via a tqdm-capture shim installed around ``fn``)
+    and drain it from the main thread.
     """
 
     thread: threading.Thread
@@ -89,30 +84,22 @@ class WorkerHandle:
 def run_in_worker(
     fn: Callable[[], T],
     *,
-    on_complete: Callable[[T | None, BaseException | None], None],
-    on_progress: Callable[[str], None] | None = None,
     progress_queue: queue.Queue | None = None,
 ) -> WorkerHandle:
-    """Run ``fn`` on a background thread; marshal callbacks to the main Qt thread.
+    """Run ``fn`` on a background thread and return a handle to it.
 
-    ``fn`` is a zero-arg callable (use a lambda or functools.partial to
-    bind arguments). ``on_complete(result, exception)`` fires exactly
-    once after ``fn`` returns or raises; exactly one of ``result`` or
-    ``exception`` is not None. ``on_progress(line)`` fires zero or more
-    times as lines are pushed into the handle's ``progress_queue`` — the
-    worker side is responsible for populating it (e.g. via a
-    ``TqdmToProgressDialog`` shim).
+    ``fn`` is a zero-arg callable (use a lambda or functools.partial
+    to bind arguments). The worker exits as soon as ``fn`` returns or
+    raises; the result lands on ``handle.result`` and any exception
+    on ``handle.exception``, and ``handle.done_event`` flips. Callers
+    are responsible for waiting on the event and reading the fields.
 
-    ``progress_queue`` allows the caller to pre-build the queue (so it
-    can be referenced from inside ``fn`` without racing thread start).
-    If omitted, a fresh queue is created and stored on the handle.
-
-    Both callbacks run on the main Qt thread, driven by a
-    ``qt.QTimer`` that this function schedules from whichever thread
-    called it — that thread must be the main Qt thread.
+    ``progress_queue`` lets the caller pre-build the queue (so it can
+    be captured by reference inside ``fn`` without racing thread
+    start). If omitted, a fresh queue is created on the handle. No Qt
+    objects are created here, so this is safe to call from any
+    thread.
     """
-    import qt
-
     if progress_queue is None:
         handle = WorkerHandle(thread=None)  # type: ignore[arg-type]
     else:
@@ -121,7 +108,7 @@ def run_in_worker(
     def _worker() -> None:
         try:
             result = fn()
-        except BaseException as exc:  # noqa: BLE001 — surface everything to on_complete
+        except BaseException as exc:  # noqa: BLE001 — surface everything via the handle
             handle.exception = exc
         else:
             handle.result = result
@@ -132,40 +119,6 @@ def run_in_worker(
         target=_worker, name="kwneuro-worker", daemon=True,
     )
     handle.thread.start()
-
-    def _drain_progress() -> None:
-        if on_progress is None:
-            return
-        while True:
-            try:
-                line = handle.progress_queue.get_nowait()
-            except queue.Empty:
-                return
-            try:
-                on_progress(line)
-            except Exception:  # noqa: BLE001
-                # A broken on_progress must not halt the poll loop —
-                # that would hang run_with_progress_dialog's busy wait.
-                logging.exception("on_progress callback raised; continuing")
-
-    def _poll() -> None:
-        _drain_progress()
-
-        if not handle.done_event.is_set():
-            qt.QTimer.singleShot(_POLL_INTERVAL_MS, _poll)
-            return
-
-        # The worker has finished; flush any lines it pushed between
-        # our last drain and its done_event.set() so the final batch
-        # (e.g. tqdm's last "193/193") isn't silently dropped.
-        _drain_progress()
-
-        if handle.exception is not None:
-            on_complete(None, handle.exception)
-        else:
-            on_complete(handle.result, None)
-
-    qt.QTimer.singleShot(0, _poll)
     return handle
 
 
@@ -345,7 +298,7 @@ def run_with_progress_dialog(
     pushed into the worker's ``progress_queue`` — either directly by
     ``fn`` or by a :class:`TqdmToProgressDialog` shim (enabled via
     ``capture_tqdm=True``) — are forwarded into the dialog's log area
-    on the main thread.
+    by the same loop that pumps ``slicer.app.processEvents``.
 
     :param capture_tqdm: If True, wrap ``fn`` in a
         :class:`TqdmToProgressDialog` context manager so tqdm progress
@@ -358,54 +311,54 @@ def run_with_progress_dialog(
     dialog.show()
     slicer.app.processEvents()
 
-    completed = threading.Event()
-    result: dict[str, Any] = {"value": None, "exception": None}
+    progress_queue: queue.Queue = queue.Queue()
 
-    def _on_complete(value: T | None, exc: BaseException | None) -> None:
-        result["value"] = value
-        result["exception"] = exc
-        completed.set()
-
-    # The TqdmToProgressDialog context manager must wrap `fn` in such a
-    # way that it activates on the worker thread (so monkey-patching
-    # affects the dipy import the worker will use) and reverts after
-    # fn completes. We build the queue up front and pass it both into
-    # run_in_worker and into the context manager — capturing it in a
-    # closure, not fetching it off the handle afterwards, to avoid a
-    # race where the worker dispatches fn before we bind.
     if capture_tqdm:
-        progress_queue: queue.Queue = queue.Queue()
-
-        def _wrapped_with_capture() -> T:
+        def _runner() -> T:
             with TqdmToProgressDialog(progress_queue):
                 return fn()
-
-        run_in_worker(
-            _wrapped_with_capture,
-            on_complete=_on_complete,
-            on_progress=dialog.appendLog,
-            progress_queue=progress_queue,
-        )
     else:
-        run_in_worker(fn, on_complete=_on_complete, on_progress=dialog.appendLog)
+        _runner = fn  # type: ignore[assignment]
 
-    while not completed.is_set():
+    handle = run_in_worker(_runner, progress_queue=progress_queue)
+
+    def _drain() -> None:
+        while True:
+            try:
+                line = progress_queue.get_nowait()
+            except queue.Empty:
+                return
+            try:
+                dialog.appendLog(line)
+            except Exception:  # noqa: BLE001
+                logging.exception("appendLog raised; continuing")
+
+    # Busy-wait on done_event directly. `processEvents` keeps the dialog
+    # responsive (Details toggle, redraws); the inline drain forwards
+    # tqdm lines without a separate QTimer poller.
+    #
+    # Important: use ``done_event.wait(timeout=...)`` rather than
+    # ``QThread.msleep``. ``threading.Event.wait`` is pure Python and
+    # releases the GIL for the full timeout, letting a CPU-bound
+    # Python worker run uninterrupted. ``QThread.msleep`` GIL-starved
+    # nibabel + dipy work to a 28× slowdown in testing.
+    while not handle.done_event.wait(timeout=0.05):
+        _drain()
         slicer.app.processEvents()
-        qt.QThread.msleep(10)
+    _drain()  # final flush after the worker set done_event
 
     dialog.close()
+    slicer.app.processEvents()
 
-    if result["exception"] is not None:
-        exc = result["exception"]
-        # Preserve the worker traceback in the log AND on the raised
-        # exception. Python 3 attaches `__traceback__` to the exception
-        # object at raise-time in the worker thread, so re-raising here
-        # naturally carries that frame; but we pass it through
-        # `with_traceback` explicitly to defend against any interpreter
-        # that might reset it on cross-thread re-raise.
+    if handle.exception is not None:
+        exc = handle.exception
+        # Worker-thread tracebacks survive a cross-thread re-raise via
+        # `with_traceback`; appending the formatted exception to the
+        # dialog log is a no-op once the dialog is closed but useful
+        # if the caller reopens it.
         dialog.appendLog("".join(traceback.format_exception(exc)))
         raise exc.with_traceback(exc.__traceback__)
-    return result["value"]  # type: ignore[no-any-return]
+    return handle.result  # type: ignore[no-any-return]
 
 
 def ensure_extras_installed(names: list[str]) -> None:

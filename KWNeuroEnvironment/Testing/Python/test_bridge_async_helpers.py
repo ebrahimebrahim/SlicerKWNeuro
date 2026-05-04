@@ -1,13 +1,12 @@
 """Smoke tests for ``kwneuro_slicer_bridge.async_helpers``.
 
 Exercises the fire-and-forget worker and the progress-dialog wrapper
-on trivially-fast closures — we're confirming the threading /
-qt.QTimer.singleShot / dialog-loop plumbing works end-to-end, not the
-behaviour of any real pipeline call.
+on trivially-fast closures — we're confirming the threading / dialog
+plumbing works end-to-end, not the behaviour of any real pipeline
+call.
 """
 from __future__ import annotations
 
-import time
 import unittest
 
 
@@ -16,57 +15,29 @@ class TestRunInWorker(unittest.TestCase):
         import slicer
         slicer.mrmlScene.Clear()
 
-    def test_success_path_invokes_on_complete_with_result(self) -> None:
-        import qt
-        import slicer
-
+    def test_success_path_writes_result_to_handle(self) -> None:
         from kwneuro_slicer_bridge import run_in_worker
 
-        captured: dict[str, object] = {}
-
-        def on_complete(result: object, exc: BaseException | None) -> None:
-            captured["result"] = result
-            captured["exception"] = exc
-
-        handle = run_in_worker(lambda: 7 * 6, on_complete=on_complete)
-
-        # Wait for the worker thread itself to finish, plus pump the
-        # Qt event loop so the marshalled on_complete actually fires.
-        handle.done_event.wait(timeout=5.0)
-        deadline = time.time() + 5.0
-        while "result" not in captured and time.time() < deadline:
-            slicer.app.processEvents()
-            qt.QThread.msleep(5)
-
-        self.assertEqual(captured.get("result"), 42)
-        self.assertIsNone(captured.get("exception"))
+        handle = run_in_worker(lambda: 7 * 6)
+        self.assertTrue(
+            handle.done_event.wait(timeout=5.0),
+            "worker did not finish within the timeout",
+        )
+        self.assertEqual(handle.result, 42)
+        self.assertIsNone(handle.exception)
         self.assertTrue(handle.done)
 
-    def test_exception_path_invokes_on_complete_with_exception(self) -> None:
-        import qt
-        import slicer
-
+    def test_exception_path_writes_exception_to_handle(self) -> None:
         from kwneuro_slicer_bridge import run_in_worker
-
-        captured: dict[str, object] = {}
 
         def boom() -> None:
             msg = "worker raised"
             raise RuntimeError(msg)
 
-        def on_complete(result: object, exc: BaseException | None) -> None:
-            captured["result"] = result
-            captured["exception"] = exc
-
-        handle = run_in_worker(boom, on_complete=on_complete)
-        handle.done_event.wait(timeout=5.0)
-        deadline = time.time() + 5.0
-        while "exception" not in captured and time.time() < deadline:
-            slicer.app.processEvents()
-            qt.QThread.msleep(5)
-
-        self.assertIsNone(captured.get("result"))
-        self.assertIsInstance(captured.get("exception"), RuntimeError)
+        handle = run_in_worker(boom)
+        self.assertTrue(handle.done_event.wait(timeout=5.0))
+        self.assertIsNone(handle.result)
+        self.assertIsInstance(handle.exception, RuntimeError)
 
 
 class TestRunWithProgressDialog(unittest.TestCase):
