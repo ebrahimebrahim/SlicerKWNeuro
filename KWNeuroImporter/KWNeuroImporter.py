@@ -270,7 +270,7 @@ class KWNeuroImporterWidget(ScriptedLoadableModuleWidget):
                 status=_("Fetching Sherbrooke 3-shell..."),
                 capture_tqdm=True,
             )
-            _, dwi = paths_and_dwi
+            _paths, dwi = paths_and_dwi
             node_id = self.logic.publish_to_scene(dwi, "HARDI193")
             self._updateResultLabel(node_id)
 
