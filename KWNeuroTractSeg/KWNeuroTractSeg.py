@@ -327,6 +327,12 @@ class KWNeuroTractSegWidget(ScriptedLoadableModuleWidget):
                 lambda: self.logic.run_tractseg(dwi, mask, output_type),
                 title=_("KWNeuroTractSeg"),
                 status=_("Running TractSeg..."),
+                # nnunetv2 / TractSeg use plain print() and tqdm for
+                # status — capture both so the dialog's Details log
+                # mirrors what would otherwise only show in the
+                # Python console.
+                capture_tqdm=True,
+                capture_stdout=True,
             )
 
             node_id = self.logic.publish_to_scene(tract_volume, name, output_type)

@@ -28,6 +28,11 @@ def numpy_to_vtk_image(array: NDArray[np.number]) -> Any:
     4D numpy input `(nx, ny, nz, C)` is therefore transposed to
     `(C, nx, ny, nz)` before F-order flattening so the resulting flat
     buffer has component as the fastest-varying axis.
+
+    The output ``vtkImageData`` preserves the input array's dtype so
+    binary labelmaps stay integer (Slicer's segmentation closed-surface
+    conversion needs that to do marching cubes) and float DWI data
+    stays float.
     """
     import vtk
     from vtk.util import numpy_support
@@ -50,9 +55,13 @@ def numpy_to_vtk_image(array: NDArray[np.number]) -> Any:
         n_components = 1
         flat = np.asfortranarray(array).flatten(order="F")
 
-    vtk_array = numpy_support.numpy_to_vtk(
-        flat, deep=True, array_type=vtk.VTK_FLOAT,
-    )
+    # numpy_to_vtk's default behaviour (no array_type) maps numpy
+    # dtype to the matching VTK type. Letting it do that keeps
+    # uint8 labelmaps as VTK_UNSIGNED_CHAR and float volumes as
+    # VTK_FLOAT — important for downstream code like Slicer's
+    # segmentation closed-surface converter, which insists on an
+    # integer scalar type.
+    vtk_array = numpy_support.numpy_to_vtk(flat, deep=True)
     vtk_array.SetNumberOfComponents(n_components)
     image_data.GetPointData().SetScalars(vtk_array)
     return image_data

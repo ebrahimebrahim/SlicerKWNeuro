@@ -283,6 +283,100 @@ class TqdmToProgressDialog:
                 self._lock_held = False
 
 
+class _TeeStream:
+    """File-like wrapper that mirrors writes to a queue line-by-line.
+
+    First destination: the original stream (so the Python console
+    keeps showing output verbatim). Second: each complete line is
+    pushed to ``queue`` for downstream rendering in the progress
+    dialog. Splits on ``\\r`` as well as ``\\n`` so tqdm-style
+    in-place progress updates also surface as discrete lines
+    instead of buffering forever.
+    """
+
+    def __init__(self, original: Any, queue_: queue.Queue) -> None:
+        self._original = original
+        self._queue = queue_
+        self._buffer = ""
+
+    def write(self, s: str) -> int:
+        # Forward to the wrapped stream first so console output stays live.
+        self._original.write(s)
+        if not isinstance(s, str):
+            return len(s)
+        self._buffer += s
+        if "\n" in self._buffer or "\r" in self._buffer:
+            normalised = self._buffer.replace("\r", "\n")
+            lines = normalised.split("\n")
+            for line in lines[:-1]:
+                line = line.rstrip()
+                if line:
+                    try:
+                        self._queue.put_nowait(line)
+                    except queue.Full:  # pragma: no cover — best-effort
+                        pass
+            self._buffer = lines[-1]
+        return len(s)
+
+    def flush(self) -> None:
+        self._original.flush()
+        if self._buffer:
+            line = self._buffer.rstrip()
+            if line:
+                try:
+                    self._queue.put_nowait(line)
+                except queue.Full:  # pragma: no cover
+                    pass
+            self._buffer = ""
+
+    def __getattr__(self, name: str) -> Any:
+        # Pass through other file-like methods (close, fileno,
+        # isatty, ...) — anything we haven't overridden.
+        return getattr(self._original, name)
+
+
+class StdStreamsToProgressDialog:
+    """Tee ``sys.stdout`` and ``sys.stderr`` to a progress queue.
+
+    Use as a context manager around the worker function. While
+    active, every complete line written to stdout / stderr is
+    forwarded to the queue (in addition to its original
+    destination). Useful for capturing ``print(...)`` output from
+    libraries that don't go through tqdm — e.g. nnunetv2 / TractSeg
+    log to plain stdout.
+
+    Note this patches ``sys.stdout`` / ``sys.stderr`` process-wide
+    for the duration of the context — any other thread printing
+    during the same window also gets teed. For our use case the
+    main thread is busy-waiting in :func:`run_with_progress_dialog`
+    and not printing anything important, so the leak is harmless.
+    """
+
+    def __init__(self, queue_: queue.Queue) -> None:
+        self._queue = queue_
+        self._original_stdout: Any = None
+        self._original_stderr: Any = None
+
+    def __enter__(self) -> StdStreamsToProgressDialog:
+        import sys
+        self._original_stdout = sys.stdout
+        self._original_stderr = sys.stderr
+        sys.stdout = _TeeStream(sys.stdout, self._queue)
+        sys.stderr = _TeeStream(sys.stderr, self._queue)
+        return self
+
+    def __exit__(self, *exc: Any) -> None:
+        import sys
+        # Flush any trailing partial line before unwiring.
+        for stream in (sys.stdout, sys.stderr):
+            try:
+                stream.flush()
+            except Exception:  # noqa: BLE001
+                pass
+        sys.stdout = self._original_stdout
+        sys.stderr = self._original_stderr
+
+
 def run_with_progress_dialog(
     fn: Callable[[], T],
     *,
@@ -290,6 +384,7 @@ def run_with_progress_dialog(
     status: str = "Running...",
     parent: Any = None,
     capture_tqdm: bool = False,
+    capture_stdout: bool = False,
     progress_queue: queue.Queue | None = None,
 ) -> T:
     """Run ``fn`` on a background thread behind a modal progress dialog.
@@ -297,18 +392,25 @@ def run_with_progress_dialog(
     Blocks from the caller's perspective; returns whatever ``fn``
     returned, or re-raises whatever ``fn`` raised. Progress lines
     pushed into the worker's ``progress_queue`` — either directly by
-    ``fn`` or by a :class:`TqdmToProgressDialog` shim (enabled via
-    ``capture_tqdm=True``) — are forwarded into the dialog's log area
-    by the same loop that pumps ``slicer.app.processEvents``.
+    ``fn`` or by one of the capture context managers — are forwarded
+    into the dialog's log area by the same loop that pumps
+    ``slicer.app.processEvents``.
 
     :param capture_tqdm: If True, wrap ``fn`` in a
         :class:`TqdmToProgressDialog` context manager so tqdm progress
         lines from dipy call sites are routed into the dialog log.
+    :param capture_stdout: If True, wrap ``fn`` in a
+        :class:`StdStreamsToProgressDialog` context manager so plain
+        ``print(...)`` output (e.g. nnunetv2 status messages) is also
+        routed into the dialog log. Compose with ``capture_tqdm`` for
+        libraries that mix tqdm and prints.
     :param progress_queue: Optional caller-provided queue that ``fn``
         can write progress strings into directly (useful when ``fn``
         does its own non-tqdm I/O — e.g. plain ``urllib.urlretrieve``).
         If omitted, a fresh queue is built internally.
     """
+    import contextlib
+
     import qt
     import slicer
 
@@ -319,12 +421,15 @@ def run_with_progress_dialog(
     if progress_queue is None:
         progress_queue = queue.Queue()
 
-    if capture_tqdm:
-        def _runner() -> T:
-            with TqdmToProgressDialog(progress_queue):
-                return fn()
-    else:
-        _runner = fn  # type: ignore[assignment]
+    def _runner() -> T:
+        with contextlib.ExitStack() as stack:
+            if capture_tqdm:
+                stack.enter_context(TqdmToProgressDialog(progress_queue))
+            if capture_stdout:
+                stack.enter_context(StdStreamsToProgressDialog(progress_queue))
+            return fn()
+        # Unreachable; ExitStack always returns. Satisfy mypy.
+        raise RuntimeError("unreachable")
 
     handle = run_in_worker(_runner, progress_queue=progress_queue)
 
