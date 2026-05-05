@@ -288,8 +288,12 @@ class KWNeuroImporterLogic(ScriptedLoadableModuleLogic):
         Uses ``urllib.request.urlretrieve`` with a ``reporthook`` to
         emit progress lines compatible with our ProgressDialog (the
         ``progress_callback`` is the same kind of "push a string"
-        function tqdm-capture uses). Errors raise; the caller wraps
-        in ``tryWithErrorDisplay``.
+        function tqdm-capture uses).
+
+        Writes through a ``.partial`` temp file and atomically
+        renames on success, so an interrupted (or test-stubbed)
+        download never leaves a half-written file at ``dest`` that
+        the next ``fetch_edden_paths`` call would accept as cached.
         """
         import urllib.request
 
@@ -308,7 +312,15 @@ class KWNeuroImporterLogic(ScriptedLoadableModuleLogic):
                     f"{total / 1e6:.0f} MB ({pct}%)",
                 )
 
-        urllib.request.urlretrieve(url, dest, reporthook=_hook)
+        partial = dest.with_suffix(dest.suffix + ".partial")
+        try:
+            urllib.request.urlretrieve(url, partial, reporthook=_hook)
+        except BaseException:
+            # Clean up the partial so we don't trip the cache-hit
+            # check on the next attempt.
+            partial.unlink(missing_ok=True)
+            raise
+        partial.replace(dest)
 
     @staticmethod
     def fetch_cenir_dwi() -> Any:
