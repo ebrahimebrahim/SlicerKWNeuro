@@ -156,6 +156,7 @@ class KWNeuroDenoiseWidget(ScriptedLoadableModuleWidget):
                 title=_("KWNeuroDenoise"),
                 status=_("Denoising..."),
                 capture_tqdm=True,
+                capture_stdout=True,
             )
 
             # Main thread: publish result.

@@ -216,6 +216,8 @@ class KWNeuroRegisterWidget(ScriptedLoadableModuleWidget):
                 ),
                 title=_("KWNeuroRegister"),
                 status=_("Running ANTs registration..."),
+                capture_tqdm=True,
+                capture_stdout=True,
             )
 
             ids = self.logic.publish_to_scene(warped, transform, name)

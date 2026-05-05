@@ -257,6 +257,8 @@ class KWNeuroTemplateWidget(ScriptedLoadableModuleWidget):
                 lambda: self.logic.run_build_template(resources, iterations),
                 title=_("KWNeuroTemplate"),
                 status=_("Building template..."),
+                capture_tqdm=True,
+                capture_stdout=True,
             )
 
             node_id = self.logic.publish_to_scene(template, "kwneuro_template")

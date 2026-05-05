@@ -271,6 +271,8 @@ class KWNeuroBrainExtractWidget(ScriptedLoadableModuleWidget):
                 lambda: self.logic.run_brain_extract(dwi),
                 title=_("KWNeuroBrainExtract"),
                 status=_("Running HD-BET..."),
+                capture_tqdm=True,
+                capture_stdout=True,
             )
 
             node_id = self.logic.publish_to_scene(mask, dwi_name)

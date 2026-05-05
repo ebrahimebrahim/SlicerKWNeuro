@@ -181,6 +181,8 @@ class KWNeuroNODDIWidget(ScriptedLoadableModuleWidget):
                 ),
                 title=_("KWNeuroNODDI"),
                 status=_("Fitting NODDI (AMICO)..."),
+                capture_tqdm=True,
+                capture_stdout=True,
             )
 
             ids = self.logic.publish_to_scene(volumes, name)

@@ -1,4 +1,3 @@
-- TractSeg result on the example data looks terrible...
 - Once https://github.com/KitwareMedical/kwneuro/pull/143 is merged: Get rid of the monkey patch in KWNeuro brain extract and use the parameter instead.
 - Once https://github.com/KitwareMedical/kwneuro/pull/139 is merged: Study it and see what features need to be added to the extension. Import structural volume from disk make sense to add?? Definitely at least a bridge thing for structural volumes though. ANd then modules for the various things that have been added for structural volume processing?
 - Add to core slicer extn manager a "install from repo" utility so we can point to the KWNeuro extn with it. Rather than putting it on extn index.

@@ -382,6 +382,8 @@ class KWNeuroHarmonizeWidget(ScriptedLoadableModuleWidget):
                 ),
                 title=_("KWNeuroHarmonize"),
                 status=_("Running ComBat..."),
+                capture_tqdm=True,
+                capture_stdout=True,
             )
 
             ids = self.logic.publish_to_scene(harmonised, names)

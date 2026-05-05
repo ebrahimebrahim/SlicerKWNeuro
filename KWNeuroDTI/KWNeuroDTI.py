@@ -385,6 +385,8 @@ class KWNeuroDTIWidget(ScriptedLoadableModuleWidget):
                 lambda: self.logic.run_estimation(dwi, mask, create_fa_md),
                 title=_("KWNeuroDTI"),
                 status=_("Fitting tensor..."),
+                capture_tqdm=True,
+                capture_stdout=True,
             )
 
             # Main thread: publish results to the scene.

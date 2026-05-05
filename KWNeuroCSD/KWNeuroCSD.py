@@ -196,6 +196,8 @@ class KWNeuroCSDWidget(ScriptedLoadableModuleWidget):
                 lambda: self.logic.run_csd(dwi, mask, n_peaks, flip),
                 title=_("KWNeuroCSD"),
                 status=_("Computing CSD peaks..."),
+                capture_tqdm=True,
+                capture_stdout=True,
             )
 
             node_id = self.logic.publish_to_scene(peaks, name)
