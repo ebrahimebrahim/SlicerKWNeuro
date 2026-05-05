@@ -5,6 +5,15 @@
   <property name="geometry"><rect><x>0</x><y>0</y><width>440</width><height>380</height></rect></property>
   <layout class="QVBoxLayout" name="verticalLayout">
    <item>
+    <widget class="QLabel" name="denoisingNoteLabel">
+     <property name="text">
+      <string>&lt;b&gt;Denoise first.&lt;/b&gt; TractSeg is highly sensitive to noise — on a noisy DWI most of the 72 bundles come back empty. Run &lt;i&gt;KWNeuro Denoise&lt;/i&gt; (Patch2Self) on the input DWI and feed the denoised result here.</string>
+     </property>
+     <property name="wordWrap"><bool>true</bool></property>
+     <property name="textInteractionFlags"><set>Qt::TextSelectableByMouse</set></property>
+    </widget>
+   </item>
+   <item>
     <widget class="ctkCollapsibleButton" name="inputsCollapsibleButton">
      <property name="text"><string>Inputs</string></property>
      <layout class="QFormLayout" name="inputsFormLayout">

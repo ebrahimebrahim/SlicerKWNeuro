@@ -62,7 +62,14 @@ class KWNeuroTractSeg(ScriptedLoadableModule):
         self.parent.helpText = _(
             "Segment white-matter tracts using TractSeg (kwneuro[tractseg]). "
             "Internally computes CSD peaks and feeds them to TractSeg's CNN. "
-            "A CUDA GPU is strongly recommended."
+            "A CUDA GPU is strongly recommended.\n\n"
+            "Denoising the input DWI first (KWNeuro Denoise -> Patch2Self) "
+            "is a critical preprocessing step. TractSeg's CSD peaks are "
+            "very sensitive to noise: on a noisy DWI most of the 72 "
+            "bundles come back empty or fragmented, while on the same DWI "
+            "after Patch2Self denoising you typically get all 72 bundles "
+            "with anatomically plausible shapes. Run KWNeuro Denoise "
+            "first and feed the denoised DWI here."
         )
         self.parent.acknowledgementText = _(
             "Developed at Kitware, Inc. as part of the brain microstructure "
