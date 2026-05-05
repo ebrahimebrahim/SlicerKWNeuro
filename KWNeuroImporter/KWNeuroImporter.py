@@ -14,8 +14,16 @@ Structure:
   bvec) + node-name field + Load button. Read-from-disk happens on a
   worker thread behind a progress dialog; scene-node creation happens
   on the main thread.
-- "Sample data" section: one-click fetch for the Sherbrooke 3-shell
-  dataset (``dipy.data.fetch_sherbrooke_3shell``).
+- "Sample data" section: two one-click fetch buttons:
+
+    * Sherbrooke 3-shell HARDI (~30 MB) — small, fast download. Good
+      for DTI / NODDI demos but TractSeg gives sparse output on it.
+    * CENIR multi-b ("HCP-like", ~500 MB) — three shells at b=1000 /
+      2000 / 3000 with hundreds of directions. Richer, what TractSeg
+      was designed for.
+
+  Both also register with Slicer's standard *Sample Data* module so
+  they appear there alongside MRHead etc.
 
 Logic uses the three-phase split so MRML scene writes stay on the
 main Qt thread.
@@ -52,13 +60,73 @@ class KWNeuroImporter(ScriptedLoadableModule):
         self.parent.helpText = _(
             "Load a DWI from disk into the Slicer scene via the kwneuro "
             "bridge (preserving the 4th dimension and attaching "
-            "gradients + b-values), or fetch dipy's Sherbrooke 3-shell "
-            "sample dataset."
+            "gradients + b-values). Also exposes one-click fetch of two "
+            "dipy DWI sample datasets (Sherbrooke 3-shell and CENIR "
+            "multi-b)."
         )
         self.parent.acknowledgementText = _(
             "Developed at Kitware, Inc. as part of the brain microstructure "
             "exploration tools effort."
         )
+
+        # Make the DWI sample datasets discoverable in Slicer's standard
+        # Sample Data module. Registration is idempotent and cheap so
+        # doing it on module init is fine.
+        slicer.app.connect(
+            "startupCompleted()",
+            _register_kwneuro_sample_data,
+        )
+
+
+def _register_kwneuro_sample_data() -> None:
+    """Add KWNeuro DWI sample sets to Slicer's SampleData module.
+
+    Uses ``customDownloader`` so we keep dipy's well-tested fetch +
+    cache logic for the actual data, but get the SampleData module's
+    GUI surface (a button per dataset, listed under a "KWNeuro DWI"
+    category) for free.
+
+    SampleData's built-in deduplication (``isSampleDataSourceRegistered``)
+    uses object identity — fresh ``SampleDataSource`` instances always
+    look new — so we guard by ``sampleName`` ourselves to keep this
+    function idempotent across module reloads.
+    """
+    try:
+        import SampleData
+    except ImportError:
+        logging.warning("KWNeuroImporter: SampleData module unavailable; "
+                        "skipping sample-data registration")
+        return
+
+    category = "KWNeuro DWI"
+    existing_names = {
+        src.sampleName
+        for src in SampleData.SampleDataLogic.sampleDataSourcesByCategory(category)
+    }
+
+    def _register(name: str, downloader: Any) -> None:
+        if name in existing_names:
+            return
+        SampleData.SampleDataLogic.registerCustomSampleDataSource(
+            category=category,
+            sampleName=name,
+            uris=[],
+            fileNames=[],
+            nodeNames=[],
+            customDownloader=downloader,
+        )
+        existing_names.add(name)
+
+    def _download_sherbrooke(_source: Any) -> None:
+        # Resolve the logic class lazily — at module-import time
+        # KWNeuroImporterLogic is not yet defined.
+        KWNeuroImporterLogic().load_sherbrooke()
+
+    def _download_cenir(_source: Any) -> None:
+        KWNeuroImporterLogic().load_cenir()
+
+    _register("Sherbrooke 3-shell HARDI", _download_sherbrooke)
+    _register("CENIR multi-b (HCP-like, ~1.7 GB)", _download_cenir)
 
 
 #
@@ -145,6 +213,71 @@ class KWNeuroImporterLogic(ScriptedLoadableModuleLogic):
                 raise RuntimeError(msg)
         return volume, bval, bvec
 
+    @staticmethod
+    def fetch_cenir_dwi() -> Any:
+        """Fetch CENIR multi-b and return a kwneuro.Dwi for the b=1000/2000/3000 shells.
+
+        **Thread-safe.**
+
+        First-time use: ``dipy.data.fetch_cenir_multib(with_raw=False)``
+        downloads the per-shell eddy-corrected files (~1.7 GB total
+        across three shells) to ``~/.dipy/cenir_multib/``.
+
+        Each call (cached or not): reads the three shells via dipy's
+        ``read_cenir_multib`` and assembles a ``kwneuro.Dwi`` in
+        memory. We don't cache the concatenated output as an extra
+        on-disk file — duplicating the ~1.7 GB of float32 DWI data
+        isn't worth saving the ~30 seconds of disk-read + concat
+        work, especially for a sample-data button.
+
+        The HCP-like triple-shell layout matches what TractSeg was
+        trained on, so downstream CSD / TractSeg gives noticeably
+        denser bundles than Sherbrooke can.
+        """
+        import dipy.data
+        import numpy as np
+
+        from kwneuro.dwi import Dwi
+        from kwneuro.resource import (
+            InMemoryBvalResource,
+            InMemoryBvecResource,
+            InMemoryVolumeResource,
+        )
+
+        logging.info(
+            "KWNeuroImporter: invoking dipy.data.fetch_cenir_multib "
+            "(will download ~1.7 GB to ~/.dipy/cenir_multib/ on first use)",
+        )
+        dipy.data.fetch_cenir_multib(with_raw=False)
+
+        logging.info(
+            "KWNeuroImporter: assembling CENIR b=1000/2000/3000 in memory",
+        )
+        img, gtab = dipy.data.read_cenir_multib(bvals=[1000, 2000, 3000])
+
+        # Renormalize bvecs to exactly unit (modulo float-64
+        # precision). dipy's ``gtab.bvecs`` are near-unit but off by
+        # ~1e-6 here and there, and ``vtkMRMLDiffusionWeightedVolumeNode``'s
+        # ``SetDiffusionGradients`` strictly rejects gradient vectors
+        # whose length is anything other than 0 or 1.
+        bvecs = np.asarray(gtab.bvecs, dtype=np.float64)
+        norms = np.linalg.norm(bvecs, axis=1, keepdims=True)
+        norms[norms == 0] = 1.0  # leave the b=0 (0,0,0) rows alone
+        bvecs = bvecs / norms
+
+        # Cast volume to float32 (CENIR's per-shell files are already
+        # float32; ``get_fdata`` upcasts to float64). Keeps the
+        # in-memory size and downstream processing predictable.
+        return Dwi(
+            volume=InMemoryVolumeResource(
+                array=np.asarray(img.get_fdata(), dtype=np.float32),
+                affine=np.asarray(img.affine),
+                metadata={},
+            ),
+            bval=InMemoryBvalResource(np.asarray(gtab.bvals, dtype=np.float64)),
+            bvec=InMemoryBvecResource(bvecs),
+        )
+
     def publish_to_scene(self, dwi: Any, name: str) -> str:
         """Push a kwneuro.Dwi into the scene. **Main thread only.**
 
@@ -189,6 +322,11 @@ class KWNeuroImporterLogic(ScriptedLoadableModuleLogic):
         dwi = self.load_dwi_from_disk(volume, bval, bvec)
         return self.publish_to_scene(dwi, name)
 
+    def load_cenir(self, name: str = "CENIR_HCP_like") -> str:
+        """Synchronous CENIR multi-b fetch + load."""
+        dwi = self.fetch_cenir_dwi()
+        return self.publish_to_scene(dwi, name)
+
 
 #
 # KWNeuroImporterWidget
@@ -218,6 +356,9 @@ class KWNeuroImporterWidget(ScriptedLoadableModuleWidget):
         self.ui.loadButton.connect("clicked(bool)", self.onLoadClicked)
         self.ui.loadSherbrookeButton.connect(
             "clicked(bool)", self.onLoadSherbrookeClicked,
+        )
+        self.ui.loadCenirButton.connect(
+            "clicked(bool)", self.onLoadCenirClicked,
         )
 
         self._updateLoadEnabled()
@@ -255,30 +396,49 @@ class KWNeuroImporterWidget(ScriptedLoadableModuleWidget):
             self._updateResultLabel(node_id)
 
     def onLoadSherbrookeClicked(self) -> None:
+        def _worker() -> Any:
+            paths = self.logic.fetch_sherbrooke_paths()
+            return self.logic.load_dwi_from_disk(*paths)
+        self._run_sample_load(
+            worker=_worker,
+            node_name="HARDI193",
+            status=_("Fetching Sherbrooke 3-shell..."),
+            error_msg=_("Failed to fetch / load Sherbrooke sample data."),
+        )
+
+    def onLoadCenirClicked(self) -> None:
+        self._run_sample_load(
+            worker=self.logic.fetch_cenir_dwi,
+            node_name="CENIR_HCP_like",
+            status=_("Fetching + concatenating CENIR multi-b..."),
+            error_msg=_("Failed to fetch / load CENIR sample data."),
+        )
+
+    def _run_sample_load(
+        self,
+        worker: Any,
+        node_name: str,
+        status: str,
+        error_msg: str,
+    ) -> None:
+        """Shared fetch + load + publish flow for sample-data buttons.
+
+        ``worker`` is a thread-safe callable returning a kwneuro.Dwi.
+        capture_tqdm=True so dipy's per-chunk download progress flows
+        into the dialog's Details log — otherwise the user stares at
+        an indeterminate bar for the multi-MB download.
+        """
         from kwneuro_slicer_bridge import run_with_progress_dialog
 
-        with slicer.util.tryWithErrorDisplay(
-            _("Failed to fetch / load Sherbrooke sample data."), waitCursor=False,
-        ):
-            # Worker: network fetch + disk read. Main thread: scene add.
-            # capture_tqdm=True so dipy's per-chunk download progress
-            # flows into the dialog's Details log — otherwise the user
-            # stares at an indeterminate bar for the ~30 MB download.
-            paths_and_dwi = run_with_progress_dialog(
-                lambda: self._fetch_and_load(),
+        with slicer.util.tryWithErrorDisplay(error_msg, waitCursor=False):
+            dwi = run_with_progress_dialog(
+                worker,
                 title=_("KWNeuroImporter"),
-                status=_("Fetching Sherbrooke 3-shell..."),
+                status=status,
                 capture_tqdm=True,
             )
-            _paths, dwi = paths_and_dwi
-            node_id = self.logic.publish_to_scene(dwi, "HARDI193")
+            node_id = self.logic.publish_to_scene(dwi, node_name)
             self._updateResultLabel(node_id)
-
-    def _fetch_and_load(self) -> tuple[tuple[Path, Path, Path], Any]:
-        """Worker-side: fetch + load into memory, no scene writes."""
-        paths = self.logic.fetch_sherbrooke_paths()
-        dwi = self.logic.load_dwi_from_disk(*paths)
-        return paths, dwi
 
     def _updateResultLabel(self, node_id: str) -> None:
         node = slicer.mrmlScene.GetNodeByID(node_id)

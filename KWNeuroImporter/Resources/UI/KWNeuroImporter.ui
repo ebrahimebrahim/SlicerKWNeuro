@@ -127,10 +127,20 @@
       <item>
        <widget class="QPushButton" name="loadSherbrookeButton">
         <property name="text">
-         <string>Load Sherbrooke 3-shell (HARDI193)</string>
+         <string>Load Sherbrooke 3-shell (HARDI193, ~30 MB)</string>
         </property>
         <property name="toolTip">
-         <string>Download (if needed) and load dipy's Sherbrooke 3-shell diffusion dataset as a vtkMRMLDiffusionWeightedVolumeNode named HARDI193. Cached at ~/.dipy/sherbrooke_3shell/ after the first download (~30 MB).</string>
+         <string>Download (if needed) and load dipy's Sherbrooke 3-shell diffusion dataset as a vtkMRMLDiffusionWeightedVolumeNode named HARDI193. Cached at ~/.dipy/sherbrooke_3shell/ after the first download (~30 MB). Good for DTI / NODDI demos; TractSeg gives sparse output on it.</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="loadCenirButton">
+        <property name="text">
+         <string>Load CENIR multi-b (HCP-like, ~1.7 GB)</string>
+        </property>
+        <property name="toolTip">
+         <string>Download (if needed) and load dipy's CENIR multi-b dataset, concatenated to the b=1000/2000/3000 shells (matching what TractSeg was trained on). Cached at ~/.dipy/cenir_multib/ after the first download (~1.7 GB total across three per-shell files). Substantially denser TractSeg bundles than Sherbrooke; the trade-off is the much larger download. Each load takes ~30 seconds for the disk read + concat (we don't cache the concatenated file).</string>
         </property>
        </widget>
       </item>
