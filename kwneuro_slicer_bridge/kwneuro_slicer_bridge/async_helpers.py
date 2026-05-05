@@ -290,6 +290,7 @@ def run_with_progress_dialog(
     status: str = "Running...",
     parent: Any = None,
     capture_tqdm: bool = False,
+    progress_queue: queue.Queue | None = None,
 ) -> T:
     """Run ``fn`` on a background thread behind a modal progress dialog.
 
@@ -303,6 +304,10 @@ def run_with_progress_dialog(
     :param capture_tqdm: If True, wrap ``fn`` in a
         :class:`TqdmToProgressDialog` context manager so tqdm progress
         lines from dipy call sites are routed into the dialog log.
+    :param progress_queue: Optional caller-provided queue that ``fn``
+        can write progress strings into directly (useful when ``fn``
+        does its own non-tqdm I/O — e.g. plain ``urllib.urlretrieve``).
+        If omitted, a fresh queue is built internally.
     """
     import qt
     import slicer
@@ -311,7 +316,8 @@ def run_with_progress_dialog(
     dialog.show()
     slicer.app.processEvents()
 
-    progress_queue: queue.Queue = queue.Queue()
+    if progress_queue is None:
+        progress_queue = queue.Queue()
 
     if capture_tqdm:
         def _runner() -> T:

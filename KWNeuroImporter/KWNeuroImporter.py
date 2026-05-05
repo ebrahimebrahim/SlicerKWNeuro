@@ -18,9 +18,11 @@ Structure:
 
     * Sherbrooke 3-shell HARDI (~30 MB) — small, fast download. Good
       for DTI / NODDI demos but TractSeg gives sparse output on it.
-    * CENIR multi-b ("HCP-like", ~500 MB) — three shells at b=1000 /
-      2000 / 3000 with hundreds of directions. Richer, what TractSeg
-      was designed for.
+    * CENIR multi-shell HARDI (~1.7 GB) — three shells at b=1000 /
+      2000 / 3000 with hundreds of directions. Richer than Sherbrooke
+      but TractSeg's training distribution is HCP-acquired data;
+      results on CENIR are denser but still don't fully match what
+      TractSeg can produce on real HCP data.
 
   Both also register with Slicer's standard *Sample Data* module so
   they appear there alongside MRHead etc.
@@ -62,7 +64,7 @@ class KWNeuroImporter(ScriptedLoadableModule):
             "bridge (preserving the 4th dimension and attaching "
             "gradients + b-values). Also exposes one-click fetch of two "
             "dipy DWI sample datasets (Sherbrooke 3-shell and CENIR "
-            "multi-b)."
+            "multi-shell)."
         )
         self.parent.acknowledgementText = _(
             "Developed at Kitware, Inc. as part of the brain microstructure "
@@ -125,8 +127,15 @@ def _register_kwneuro_sample_data() -> None:
     def _download_cenir(_source: Any) -> None:
         KWNeuroImporterLogic().load_cenir()
 
+    def _download_edden(_source: Any) -> None:
+        KWNeuroImporterLogic().load_edden()
+
     _register("Sherbrooke 3-shell HARDI", _download_sherbrooke)
-    _register("CENIR multi-b (HCP-like, ~1.7 GB)", _download_cenir)
+    _register("CENIR multi-shell HARDI (b=1000/2000/3000, ~1.7 GB)", _download_cenir)
+    _register(
+        "EDDEN HCP-protocol DWI (OpenNeuro ds004666 sub-01, ~1.8 GB)",
+        _download_edden,
+    )
 
 
 #
@@ -212,6 +221,94 @@ class KWNeuroImporterLogic(ScriptedLoadableModuleLogic):
                 )
                 raise RuntimeError(msg)
         return volume, bval, bvec
+
+    @staticmethod
+    def fetch_edden_paths(progress_callback: Any = None) -> tuple[Path, Path, Path]:
+        """Fetch EDDEN sub-01 ses-1p5mm AVG_complex DWI from OpenNeuro.
+
+        **Thread-safe.** Returns ``(volume_path, bval_path, bvec_path)``.
+
+        EDDEN (OpenNeuro ds004666) is a single-subject CC0 dataset
+        whose ses-1p5mm scan uses an HCP-style q-space schema (270
+        diffusion directions: 90 each at b=1000, 2000, 3000; 27 b=0;
+        1.5 mm isotropic) — the closest publicly redistributable
+        match to what TractSeg was trained on. We pull the
+        complex-averaged + preprocessed derivative for clean SNR.
+
+        Files are cached at
+        ``~/.kwneuro_sample_data/edden_ds004666_ses-1p5mm/``. Total
+        download is ~1.8 GB (NIfTI dominates; bval/bvec are tiny).
+
+        ``progress_callback`` is called with a one-line status string
+        once per ~5% of the download.
+        """
+        cache_dir = (
+            Path.home() / ".kwneuro_sample_data" / "edden_ds004666_ses-1p5mm"
+        )
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        s3_root = "https://s3.amazonaws.com/openneuro.org/ds004666"
+        files = {
+            "volume": (
+                f"{s3_root}/derivatives/ses-1p5mm/dwi/AVG_complex/"
+                "sub-01_ses-1p5mm_dir-AP_AVG_complex_dwi_processed.nii.gz",
+                cache_dir / "sub-01_ses-1p5mm_AVG_complex_dwi.nii.gz",
+            ),
+            "bval": (
+                f"{s3_root}/sub-01/ses-1p5mm/dwi/sub-01_ses-1p5mm_dir-AP_dwi.bval",
+                cache_dir / "sub-01_ses-1p5mm_dwi.bval",
+            ),
+            "bvec": (
+                f"{s3_root}/sub-01/ses-1p5mm/dwi/sub-01_ses-1p5mm_dir-AP_dwi.bvec",
+                cache_dir / "sub-01_ses-1p5mm_dwi.bvec",
+            ),
+        }
+
+        for label, (url, dest) in files.items():
+            if dest.exists() and dest.stat().st_size > 0:
+                continue
+            logging.info("KWNeuroImporter: downloading EDDEN %s from %s", label, url)
+            if progress_callback is not None:
+                progress_callback(f"Downloading EDDEN {label} ({url})...")
+            KWNeuroImporterLogic._download_with_progress(
+                url, dest, label, progress_callback,
+            )
+
+        return files["volume"][1], files["bval"][1], files["bvec"][1]
+
+    @staticmethod
+    def _download_with_progress(
+        url: str,
+        dest: Path,
+        label: str,
+        progress_callback: Any,
+    ) -> None:
+        """Download ``url`` to ``dest``, posting a status line every ~5%.
+
+        Uses ``urllib.request.urlretrieve`` with a ``reporthook`` to
+        emit progress lines compatible with our ProgressDialog (the
+        ``progress_callback`` is the same kind of "push a string"
+        function tqdm-capture uses). Errors raise; the caller wraps
+        in ``tryWithErrorDisplay``.
+        """
+        import urllib.request
+
+        last_pct = -1
+
+        def _hook(block_idx: int, block_size: int, total: int) -> None:
+            nonlocal last_pct
+            if total <= 0 or progress_callback is None:
+                return
+            downloaded = block_idx * block_size
+            pct = min(100, int(100 * downloaded / total))
+            if pct - last_pct >= 5:
+                last_pct = pct
+                progress_callback(
+                    f"{label}: {downloaded / 1e6:.0f} / "
+                    f"{total / 1e6:.0f} MB ({pct}%)",
+                )
+
+        urllib.request.urlretrieve(url, dest, reporthook=_hook)
 
     @staticmethod
     def fetch_cenir_dwi() -> Any:
@@ -327,6 +424,12 @@ class KWNeuroImporterLogic(ScriptedLoadableModuleLogic):
         dwi = self.fetch_cenir_dwi()
         return self.publish_to_scene(dwi, name)
 
+    def load_edden(self, name: str = "EDDEN_HCP_protocol") -> str:
+        """Synchronous EDDEN sub-01 fetch + load."""
+        volume, bval, bvec = self.fetch_edden_paths()
+        dwi = self.load_dwi_from_disk(volume, bval, bvec)
+        return self.publish_to_scene(dwi, name)
+
 
 #
 # KWNeuroImporterWidget
@@ -359,6 +462,9 @@ class KWNeuroImporterWidget(ScriptedLoadableModuleWidget):
         )
         self.ui.loadCenirButton.connect(
             "clicked(bool)", self.onLoadCenirClicked,
+        )
+        self.ui.loadEddenButton.connect(
+            "clicked(bool)", self.onLoadEddenClicked,
         )
 
         self._updateLoadEnabled()
@@ -413,6 +519,35 @@ class KWNeuroImporterWidget(ScriptedLoadableModuleWidget):
             status=_("Fetching + concatenating CENIR multi-b..."),
             error_msg=_("Failed to fetch / load CENIR sample data."),
         )
+
+    def onLoadEddenClicked(self) -> None:
+        # EDDEN goes through urllib download (no tqdm to capture);
+        # we feed the bridge's progress queue ourselves via the
+        # ``progress_callback`` hook so the dialog log shows
+        # MB-counter lines as the download progresses.
+        import queue as _queue
+
+        from kwneuro_slicer_bridge import run_with_progress_dialog
+
+        progress_queue: _queue.Queue = _queue.Queue()
+
+        def _worker() -> Any:
+            paths = self.logic.fetch_edden_paths(
+                progress_callback=progress_queue.put_nowait,
+            )
+            return self.logic.load_dwi_from_disk(*paths)
+
+        with slicer.util.tryWithErrorDisplay(
+            _("Failed to fetch / load EDDEN sample data."), waitCursor=False,
+        ):
+            dwi = run_with_progress_dialog(
+                _worker,
+                title=_("KWNeuroImporter"),
+                status=_("Fetching EDDEN HCP-protocol DWI..."),
+                progress_queue=progress_queue,
+            )
+            node_id = self.logic.publish_to_scene(dwi, "EDDEN_HCP_protocol")
+            self._updateResultLabel(node_id)
 
     def _run_sample_load(
         self,

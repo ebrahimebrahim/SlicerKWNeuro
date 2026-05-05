@@ -137,10 +137,20 @@
       <item>
        <widget class="QPushButton" name="loadCenirButton">
         <property name="text">
-         <string>Load CENIR multi-b (HCP-like, ~1.7 GB)</string>
+         <string>Load CENIR multi-shell (b=1000/2000/3000, ~1.7 GB)</string>
         </property>
         <property name="toolTip">
-         <string>Download (if needed) and load dipy's CENIR multi-b dataset, concatenated to the b=1000/2000/3000 shells (matching what TractSeg was trained on). Cached at ~/.dipy/cenir_multib/ after the first download (~1.7 GB total across three per-shell files). Substantially denser TractSeg bundles than Sherbrooke; the trade-off is the much larger download. Each load takes ~30 seconds for the disk read + concat (we don't cache the concatenated file).</string>
+         <string>Download (if needed) and load the CENIR multi-shell HARDI dataset (UW ResearchWorks 1773/33311) via dipy's fetcher, concatenated to the b=1000/2000/3000 shells. Cached at ~/.dipy/cenir_multib/ after the first download (~1.7 GB total across three per-shell files). Substantially denser TractSeg bundles than Sherbrooke. Each load takes ~15 seconds for the disk read + concat (we don't cache the concatenated file).</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="loadEddenButton">
+        <property name="text">
+         <string>Load EDDEN HCP-protocol DWI (sub-01, ~1.8 GB)</string>
+        </property>
+        <property name="toolTip">
+         <string>Download (if needed) and load the EDDEN single-subject HCP-protocol DWI (OpenNeuro ds004666 sub-01 ses-1p5mm AVG_complex derivative). 270 directions across b=1000/2000/3000 at 1.5 mm isotropic — the closest publicly redistributable match to the HCP-YA acquisition TractSeg was trained on. CC0 license. Cached at ~/.kwneuro_sample_data/edden_ds004666_ses-1p5mm/ after the first ~1.8 GB download.</string>
         </property>
        </widget>
       </item>
