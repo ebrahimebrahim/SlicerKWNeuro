@@ -106,9 +106,11 @@ class TestKWNeuroBrainExtractLogic(unittest.TestCase):
         dwi = _synthetic_dwi()
         mock_mask = (dwi.volume.get_array() > 400).any(axis=-1).astype("uint8")
         call_count = [0]
+        captured_kwargs: dict = {}
 
-        def fake_brain_extract_single(dwi_arg, output_path):
+        def fake_brain_extract_single(dwi_arg, output_path, **kwargs):
             call_count[0] += 1
+            captured_kwargs.update(kwargs)
             output_path = Path(output_path)
             resource = NiftiVolumeResource.save(
                 InMemoryVolumeResource(
@@ -134,6 +136,12 @@ class TestKWNeuroBrainExtractLogic(unittest.TestCase):
             "patched kwneuro.masks symbol. If this fails, the module "
             "has a different import path that skipped the mock — which "
             "would cause real HD-BET to run in CI.",
+        )
+        self.assertTrue(
+            captured_kwargs.get("sequential"),
+            "run_brain_extract must pass sequential=True so kwneuro "
+            "uses nnunetv2's no-multiprocessing path. Without it the "
+            "Manager / Pool spawns crash inside Slicer.",
         )
         self.assertTrue(mask_resource.is_loaded)
         np.testing.assert_array_equal(mask_resource.get_array(), mock_mask)
