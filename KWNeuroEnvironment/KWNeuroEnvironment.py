@@ -2,7 +2,8 @@
 
 Provides a simple UI in 3D Slicer for inspecting and managing the Python
 environment that the KWNeuro extension depends on: `kwneuro` itself and
-the four kwneuro optional extras (`hdbet`, `noddi`, `tractseg`, `combat`).
+the five kwneuro optional extras (`hdbet`, `noddi`, `tractseg`,
+`combat`, `antspynet`).
 
 Design notes:
 
@@ -76,6 +77,12 @@ EXTRAS_INSTALL_SPEC: dict[str, dict[str, object]] = {
         "import_probe": "neuroCombat",
         "display_name": "ComBat harmonisation",
     },
+    "antspynet": {
+        "packages": ["antspynet"],
+        "skip_packages": None,
+        "import_probe": "antspynet",
+        "display_name": "ANTsPyNet structural segmentation / parcellation",
+    },
 }
 
 
@@ -93,9 +100,10 @@ class KWNeuroEnvironment(ScriptedLoadableModule):
         self.parent.contributors = ["Ebrahim Ebrahim (Kitware, Inc.)"]
         self.parent.helpText = _(
             "Install-status panel for the KWNeuro extension. Manages the "
-            "kwneuro library and the four optional kwneuro extras "
-            "(hdbet, noddi, tractseg, combat). The kwneuro_slicer_bridge "
-            "package is bundled with the extension and needs no install."
+            "kwneuro library and the five optional kwneuro extras "
+            "(hdbet, noddi, tractseg, combat, antspynet). The "
+            "kwneuro_slicer_bridge package is bundled with the extension "
+            "and needs no install."
         )
         self.parent.acknowledgementText = _(
             "Developed at Kitware, Inc. as part of the brain microstructure "

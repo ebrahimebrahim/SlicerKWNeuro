@@ -67,6 +67,39 @@ def _write_synthetic_dwi_to_disk(
     return nii_path, bval_path, bvec_path
 
 
+def _write_synthetic_structural_to_disk(dest: Path, name: str = "synth_t1") -> Path:
+    from kwneuro.io import NiftiVolumeResource
+    from kwneuro.resource import InMemoryVolumeResource
+
+    arr = np.arange(4 * 5 * 6, dtype=np.float32).reshape(4, 5, 6)
+    affine = np.array(
+        [
+            [1.2, 0.0, 0.0, -4.0],
+            [0.0, 1.3, 0.0, 5.0],
+            [0.0, 0.0, 1.4, -6.0],
+            [0.0, 0.0, 0.0, 1.0],
+        ],
+        dtype=np.float64,
+    )
+    path = dest / f"{name}.nii.gz"
+    NiftiVolumeResource.save(
+        InMemoryVolumeResource(
+            array=arr,
+            affine=affine,
+            metadata={"xyzt_units": 2},
+        ),
+        path,
+    )
+    return path
+
+
+def _require_structural_api() -> None:
+    import importlib.util
+
+    if importlib.util.find_spec("kwneuro.structural") is None:
+        raise unittest.SkipTest("kwneuro structural API is not installed")
+
+
 class TestKWNeuroImporterLogic(unittest.TestCase):
     def setUp(self) -> None:
         import slicer
@@ -128,6 +161,29 @@ class TestKWNeuroImporterLogic(unittest.TestCase):
             )
             np.testing.assert_allclose(in_scene.bval.get(), original.bval.get())
             np.testing.assert_allclose(in_scene.bvec.get(), original.bvec.get())
+
+    def test_load_structural_from_path_round_trips_data(self) -> None:
+        """Structural NIfTI import creates a scalar node with matching data."""
+        _require_structural_api()
+        import slicer
+
+        from kwneuro.io import NiftiVolumeResource
+        from kwneuro_slicer_bridge import InSceneVolumeResource
+        from KWNeuroImporter import KWNeuroImporterLogic
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_synthetic_structural_to_disk(Path(tmp), "struct_import")
+            original = NiftiVolumeResource(path).load()
+
+            logic = KWNeuroImporterLogic()
+            node_id = logic.load_structural_from_path(path, name="imported_t1")
+            node = slicer.mrmlScene.GetNodeByID(node_id)
+            self.assertEqual(node.GetClassName(), "vtkMRMLScalarVolumeNode")
+            self.assertEqual(node.GetName(), "imported_t1")
+
+            in_scene = InSceneVolumeResource.from_node(node).to_in_memory()
+            np.testing.assert_allclose(in_scene.get_array(), original.get_array())
+            np.testing.assert_allclose(in_scene.get_affine(), original.get_affine())
 
     def test_load_from_paths_raises_on_missing_file(self) -> None:
         """Missing any one of the three required files must raise.
@@ -232,6 +288,45 @@ class TestKWNeuroImporterLogic(unittest.TestCase):
                 else:
                     os.environ.pop("HOME", None)
 
+    def test_ds000221_multimodal_fetch_uses_cache_and_mocked_downloads(self) -> None:
+        """OpenNeuro path logic is covered without network access."""
+        import os
+
+        from KWNeuroImporter import KWNeuroImporterLogic
+
+        original_home = os.environ.get("HOME")
+        original_download = KWNeuroImporterLogic._download_with_progress
+        calls: list[tuple[str, Path, str]] = []
+
+        def fake_download(url, dest, label, progress_callback):
+            calls.append((url, Path(dest), label))
+            Path(dest).write_bytes(f"{label}\n".encode("ascii"))
+
+        with tempfile.TemporaryDirectory() as fake_home:
+            os.environ["HOME"] = fake_home
+            KWNeuroImporterLogic._download_with_progress = staticmethod(fake_download)
+            try:
+                paths = KWNeuroImporterLogic.fetch_ds000221_multimodal_paths()
+                self.assertEqual(len(paths), 4)
+                for path in paths:
+                    self.assertTrue(path.exists())
+                    self.assertIn("ds000221_sub-010002_ses-01", str(path))
+                self.assertEqual(len(calls), 4)
+
+                # Second call should hit the cache and not download again.
+                calls.clear()
+                paths_again = KWNeuroImporterLogic.fetch_ds000221_multimodal_paths()
+                self.assertEqual(paths_again, paths)
+                self.assertEqual(calls, [])
+            finally:
+                KWNeuroImporterLogic._download_with_progress = staticmethod(
+                    original_download,
+                )
+                if original_home is not None:
+                    os.environ["HOME"] = original_home
+                else:
+                    os.environ.pop("HOME", None)
+
 
 class TestKWNeuroImporterWidget(unittest.TestCase):
     def setUp(self) -> None:
@@ -285,6 +380,28 @@ class TestKWNeuroImporterWidget(unittest.TestCase):
             widget.ui.nameLineEdit.text = "   "
             self._pump()
             self.assertFalse(widget.ui.loadButton.enabled)
+
+    def test_structural_load_button_enables_only_when_path_and_name_set(self) -> None:
+        widget = self._widget()
+
+        with tempfile.TemporaryDirectory() as tmp:
+            path = _write_synthetic_structural_to_disk(Path(tmp), "widget_struct")
+
+            widget.ui.structuralPathLineEdit.currentPath = ""
+            widget.ui.structuralNameLineEdit.text = "t1"
+            widget._updateStructuralLoadEnabled()
+            self._pump()
+            self.assertFalse(widget.ui.loadStructuralButton.enabled)
+
+            widget.ui.structuralPathLineEdit.currentPath = str(path)
+            widget._updateStructuralLoadEnabled()
+            self._pump()
+            self.assertTrue(widget.ui.loadStructuralButton.enabled)
+
+            widget.ui.structuralNameLineEdit.text = "   "
+            widget._updateStructuralLoadEnabled()
+            self._pump()
+            self.assertFalse(widget.ui.loadStructuralButton.enabled)
 
     def test_signal_connection_is_load_bearing(self) -> None:
         """Deleting a currentPathChanged connection breaks button updates.

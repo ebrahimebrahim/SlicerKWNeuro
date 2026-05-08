@@ -1,13 +1,13 @@
-"""KWNeuroBrainExtract - run HD-BET on a DWI's mean b0 image.
+"""KWNeuroBrainExtract - run HD-BET on a DWI mean-b0 or structural image.
 
-Wraps ``kwneuro.masks.brain_extract_single`` and publishes the
-resulting binary mask as a ``vtkMRMLLabelMapVolumeNode`` in the scene.
+Wraps ``kwneuro.masks.brain_extract`` and publishes the resulting
+binary mask as a ``vtkMRMLLabelMapVolumeNode`` in the scene.
 
 The hd_bet extra (``kwneuro[hdbet]``, which pulls in torch + nnunetv2)
 is required; ``ensure_extras_installed`` checks this up front and
 points the user at KWNeuroEnvironment if the extra isn't present.
 
-Uses the three-phase split: the DWI is materialised into memory on
+Uses the three-phase split: scene input is materialised into memory on
 the main Qt thread, HD-BET runs on a worker thread, and the labelmap
 node is added on the main thread.
 """
@@ -42,10 +42,10 @@ class KWNeuroBrainExtract(ScriptedLoadableModule):
         self.parent.dependencies = []
         self.parent.contributors = ["Ebrahim Ebrahim (Kitware, Inc.)"]
         self.parent.helpText = _(
-            "Extract a brain mask from a DWI using HD-BET (deep-learning "
-            "brain extractor). Wraps kwneuro.masks.brain_extract_single. "
-            "Requires the kwneuro[hdbet] optional extra, managed from "
-            "KWNeuroEnvironment."
+            "Extract a brain mask from a DWI mean-b0 or structural image "
+            "using HD-BET (deep-learning brain extractor). Wraps "
+            "kwneuro.masks.brain_extract. Requires the kwneuro[hdbet] "
+            "optional extra, managed from KWNeuroEnvironment."
         )
         self.parent.acknowledgementText = _(
             "Developed at Kitware, Inc. as part of the brain microstructure "
@@ -64,29 +64,42 @@ class KWNeuroBrainExtractLogic(ScriptedLoadableModuleLogic):
     def __init__(self) -> None:
         ScriptedLoadableModuleLogic.__init__(self)
 
-    def prepare_inputs(self, dwi_node: Any) -> tuple[Any, str]:
-        """Materialise DWI into memory and check for the hdbet extra.
+    def prepare_inputs(self, input_node: Any) -> tuple[Any, str]:
+        """Materialise input into a 3D volume and check for the hdbet extra.
 
-        **Main thread only.** Returns ``(dwi_resource, dwi_name)``.
+        **Main thread only.** Returns ``(volume_resource, input_name)``.
         Raises ``RuntimeError`` if the hdbet extra is not installed,
         with a message that points at KWNeuroEnvironment.
         """
-        from kwneuro_slicer_bridge import InSceneDwi, ensure_extras_installed
+        from kwneuro_slicer_bridge import (
+            InSceneDwi,
+            InSceneVolumeResource,
+            ensure_extras_installed,
+        )
 
-        if dwi_node is None:
-            msg = "Input DWI node is required."
+        if input_node is None:
+            msg = "Input image node is required."
             raise ValueError(msg)
 
         ensure_extras_installed(["hdbet"])
 
-        dwi_name = dwi_node.GetName() or "kwneuro_dwi"
-        dwi = InSceneDwi.from_node(dwi_node).to_in_memory()
-        return dwi, dwi_name
+        input_name = input_node.GetName() or "kwneuro_input"
+        if input_node.IsA("vtkMRMLDiffusionWeightedVolumeNode"):
+            dwi = InSceneDwi.from_node(input_node).to_in_memory()
+            return dwi.compute_mean_b0(), input_name
+        if input_node.IsA("vtkMRMLScalarVolumeNode"):
+            return InSceneVolumeResource.from_node(input_node).to_in_memory(), input_name
 
-    def run_brain_extract(self, dwi: Any) -> Any:
-        """Run HD-BET on the DWI's mean b0. **Thread-safe.**
+        msg = (
+            "Input must be a vtkMRMLDiffusionWeightedVolumeNode or "
+            f"vtkMRMLScalarVolumeNode, got {input_node.GetClassName()}."
+        )
+        raise ValueError(msg)
 
-        Calls ``kwneuro.masks.brain_extract_single`` with a temp
+    def run_brain_extract(self, volume: Any) -> Any:
+        """Run HD-BET on a 3D volume. **Thread-safe.**
+
+        Calls ``kwneuro.masks.brain_extract`` with a temp
         output path and returns a loaded ``InMemoryVolumeResource``
         containing the binary mask.
 
@@ -97,14 +110,30 @@ class KWNeuroBrainExtractLogic(ScriptedLoadableModuleLogic):
         ``slicerqt.py`` and crash on names that only exist in the
         main Slicer process.
         """
-        from kwneuro.masks import brain_extract_single
+        import kwneuro.masks as masks_mod
 
         with tempfile.TemporaryDirectory(prefix="kwneuro_bet_") as tmp:
             output_path = Path(tmp) / "brainmask.nii.gz"
             logging.info("KWNeuroBrainExtract: running HD-BET -> %s", output_path)
-            mask_resource = brain_extract_single(
-                dwi, output_path, sequential=True,
-            )
+            brain_extract = getattr(masks_mod, "brain_extract", None)
+            if brain_extract is not None:
+                mask_resource = brain_extract(
+                    volume=volume, output_path=output_path, sequential=True,
+                )
+            else:
+                # Compatibility for older kwneuro installs that only
+                # exposed brain_extract_single(dwi, ...). The adapter
+                # supplies the one method that path needs.
+                class _MeanB0Adapter:
+                    def __init__(self, mean_b0: Any) -> None:
+                        self._mean_b0 = mean_b0
+
+                    def compute_mean_b0(self) -> Any:
+                        return self._mean_b0
+
+                mask_resource = masks_mod.brain_extract_single(
+                    _MeanB0Adapter(volume), output_path, sequential=True,
+                )
             return mask_resource.load()
 
     def publish_to_scene(self, mask_resource: Any, base_name: str) -> str:
@@ -112,49 +141,16 @@ class KWNeuroBrainExtractLogic(ScriptedLoadableModuleLogic):
 
         Returns the MRML ID of the new ``vtkMRMLLabelMapVolumeNode``.
         """
-        from kwneuro_slicer_bridge.conversions import (
-            affine_to_ijk_to_ras_matrix,
-            numpy_to_vtk_image,
-        )
-
-        # InSceneVolumeResource.from_resource creates a scalar volume
-        # node, but a brain mask belongs in a labelmap so Slicer's
-        # segmentation tools can consume it. Build the labelmap node
-        # directly; use the same conversion helpers the bridge uses.
-        raw = mask_resource.get_array()
-        # HD-BET returns a 0/1 mask with save_probabilities=False; treat
-        # it as binary rather than casting — a silent astype would map
-        # probability maps or >255 label values to the wrong thing.
-        array = (raw > 0).astype("uint8")
-        affine = mask_resource.get_affine()
+        from kwneuro_slicer_bridge import publish_labelmap_resource
 
         name = f"{base_name}_brainmask"
-        labelmap_node = slicer.mrmlScene.AddNewNodeByClass(
-            "vtkMRMLLabelMapVolumeNode", name,
-        )
-        try:
-            labelmap_node.SetIJKToRASMatrix(affine_to_ijk_to_ras_matrix(affine))
-            labelmap_node.SetAndObserveImageData(numpy_to_vtk_image(array))
-            labelmap_node.CreateDefaultDisplayNodes()
-            # CreateDefaultDisplayNodes on a labelmap creates a display
-            # node but does not always attach a color table — users
-            # then see an invisible / single-colour layer. Explicitly
-            # assign Slicer's Labels table so the mask renders.
-            display_node = labelmap_node.GetDisplayNode()
-            if display_node is not None:
-                display_node.SetAndObserveColorNodeID(
-                    "vtkMRMLColorTableNodeLabels",
-                )
-        except BaseException:
-            slicer.mrmlScene.RemoveNode(labelmap_node)
-            raise
-        return labelmap_node.GetID()
+        return publish_labelmap_resource(mask_resource, name, binary=True)
 
     def process(self, dwi_node: Any) -> str:
         """Synchronous full pipeline; composes the three phases."""
-        dwi, dwi_name = self.prepare_inputs(dwi_node)
-        mask = self.run_brain_extract(dwi)
-        return self.publish_to_scene(mask, dwi_name)
+        volume, input_name = self.prepare_inputs(dwi_node)
+        mask = self.run_brain_extract(volume)
+        return self.publish_to_scene(mask, input_name)
 
 
 #
@@ -191,7 +187,7 @@ class KWNeuroBrainExtractWidget(ScriptedLoadableModuleWidget):
     def onApplyClicked(self) -> None:
         from kwneuro_slicer_bridge import run_with_progress_dialog
 
-        dwi_node = self.ui.inputDwiSelector.currentNode()
+        input_node = self.ui.inputDwiSelector.currentNode()
 
         import qt
 
@@ -205,7 +201,7 @@ class KWNeuroBrainExtractWidget(ScriptedLoadableModuleWidget):
             # the UI doesn't appear hung.
             qt.QApplication.setOverrideCursor(qt.Qt.BusyCursor)
             try:
-                dwi, dwi_name = self.logic.prepare_inputs(dwi_node)
+                volume, input_name = self.logic.prepare_inputs(input_node)
             finally:
                 qt.QApplication.restoreOverrideCursor()
 
@@ -214,14 +210,14 @@ class KWNeuroBrainExtractWidget(ScriptedLoadableModuleWidget):
             # wouldn't yield any lines. Leave it off rather than
             # pretending to capture.
             mask = run_with_progress_dialog(
-                lambda: self.logic.run_brain_extract(dwi),
+                lambda: self.logic.run_brain_extract(volume),
                 title=_("KWNeuroBrainExtract"),
                 status=_("Running HD-BET..."),
                 capture_tqdm=True,
                 capture_stdout=True,
             )
 
-            node_id = self.logic.publish_to_scene(mask, dwi_name)
+            node_id = self.logic.publish_to_scene(mask, input_name)
             node = slicer.mrmlScene.GetNodeByID(node_id)
             if node is not None:
                 self.ui.resultLabel.text = f"Created: {node.GetName()}"

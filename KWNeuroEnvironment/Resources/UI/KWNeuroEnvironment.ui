@@ -89,6 +89,13 @@
            </property>
           </widget>
          </item>
+         <item>
+          <widget class="QCheckBox" name="extra_antspynet_CheckBox">
+           <property name="text">
+            <string>antspynet — Deep Atropos tissue segmentation and DKT parcellation</string>
+           </property>
+          </widget>
+         </item>
         </layout>
        </widget>
       </item>

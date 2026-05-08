@@ -233,7 +233,7 @@ bugs.
 
 ## Optional extras — install notes
 
-Four kwneuro optional extras managed by `KWNeuroEnvironment`:
+Five kwneuro optional extras managed by `KWNeuroEnvironment`:
 
 | extra | PyPI package(s) | notes |
 |---|---|---|
@@ -241,6 +241,7 @@ Four kwneuro optional extras managed by `KWNeuroEnvironment`:
 | `noddi` | `dmri-amico == 2.1.1`, `backports.tarfile` | AMICO writes kernel caches to disk; kwneuro redirects to a tmpdir via `set_config("ATOMS_path", tmpdir)`. |
 | `tractseg` | `TractSeg` | **MUST pass `skip_packages=["fury"]`** to `slicer.packaging.pip_install` — `fury` drags in `vtk<9.4` which would clobber Slicer's bundled VTK 9.6+ and break rendering. |
 | `combat` | `neuroCombat == 0.2.12` | Pinned because `neuroCombat` is dormant; we want Dependabot to flag any new release. |
+| `antspynet` | `antspynet` | Needed for Deep Atropos tissue segmentation and DKT parcellation. |
 
 ### The TractSeg install quirk
 
@@ -301,6 +302,10 @@ slicer-extn/
 ├── KWNeuroEnvironment/             # install-status panel + bridge tests
 ├── KWNeuroImporter/                # DWI loader + Sherbrooke fetch
 ├── KWNeuroBrainExtract/            # HD-BET (extra: hdbet)
+├── KWNeuroBiasCorrect/             # structural N4 bias correction
+├── KWNeuroTissueSegment/           # Atropos / Deep Atropos (extra: antspynet for deep)
+├── KWNeuroParcellate/              # DKT parcellation (extra: antspynet)
+├── KWNeuroDwiToStructuralRegister/ # DWI mean-b0 ↔ structural registration
 ├── KWNeuroDenoise/                 # Patch2Self
 ├── KWNeuroDTI/                     # tensor fit
 ├── KWNeuroCSD/                     # CSD peaks

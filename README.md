@@ -1,13 +1,15 @@
 # KWNeuro — 3D Slicer extension bridging `kwneuro`
 
 A 3D Slicer extension that brings the [kwneuro](https://github.com/KitwareMedical/kwneuro)
-diffusion-MRI library into Slicer — both as a scriptable bridge for
-pipeline developers and as clickable GUI modules for researchers.
+neuroimage processing toolkit into Slicer — both as a scriptable
+bridge for pipeline developers and as clickable GUI modules for
+researchers.
 
 ## What's here
 
-Eleven scripted modules: **KWNeuroEnvironment** (manages install
-state) plus ten pipeline-stage wrappers. Each pipeline module uses
+Fifteen scripted modules: **KWNeuroEnvironment** (manages install
+state) plus structural, diffusion, registration, and group-analysis
+pipeline-stage wrappers. Each pipeline module uses
 the same three-phase architecture — materialise inputs on the main
 Qt thread, run the heavy numpy / dipy / ANTs / AMICO / TractSeg
 compute on a background worker, publish outputs back on the main
@@ -16,9 +18,13 @@ dialog without crashing the subject-hierarchy plugin.
 
 | Module | Role | kwneuro extra required |
 |---|---|---|
-| **KWNeuroEnvironment** | Install / manage kwneuro and the four optional extras (the bridge ships bundled, no install needed) | — |
-| **KWNeuroImporter** | Load DWI from NIfTI + FSL bval/bvec (preserves 4D); fetch Sherbrooke sample | — |
-| **KWNeuroBrainExtract** | HD-BET brain mask from DWI mean b0 | `hdbet` |
+| **KWNeuroEnvironment** | Install / manage kwneuro and the five optional extras (the bridge ships bundled, no install needed) | — |
+| **KWNeuroImporter** | Load DWI from NIfTI + FSL bval/bvec (preserves 4D), load structural NIfTI, and fetch sample datasets | — |
+| **KWNeuroBrainExtract** | HD-BET brain mask from DWI mean b0 or structural image | `hdbet` |
+| **KWNeuroBiasCorrect** | N4 bias correction for structural images | — |
+| **KWNeuroTissueSegment** | Atropos / Deep Atropos tissue labels | `antspynet` for Deep Atropos only |
+| **KWNeuroParcellate** | DKT structural parcellation | `antspynet` |
+| **KWNeuroDwiToStructuralRegister** | Register DWI mean-b0 to T1 and optionally warp structural labels into DWI space | — |
 | **KWNeuroDenoise** | Patch2Self denoising (dipy) | — |
 | **KWNeuroDTI** | Tensor fit + optional FA / MD; mask accepts scalar / labelmap / segmentation | — |
 | **KWNeuroCSD** | Constrained Spherical Deconvolution peaks (MRtrix3-style vector volume) | — |
@@ -32,10 +38,11 @@ Plus **`kwneuro_slicer_bridge`** — a small Python package bundled
 with the extension (no separate install) exposing:
 
 - `InSceneVolumeResource`, `InSceneDwi`, `InSceneDti`,
+  `InSceneStructuralImage`,
   `InSceneTransformResource`: scene-backed wrappers. `InSceneDwi`
-  and `InSceneDti` subclass kwneuro's own `Dwi` / `Dti` so they
-  drop directly into any pipeline function that takes the parent
-  type.
+  `InSceneDti`, and `InSceneStructuralImage` subclass kwneuro's own
+  `Dwi` / `Dti` / `StructuralImage` so they drop directly into any
+  pipeline function that takes the parent type.
 - `run_in_worker`, `run_with_progress_dialog`, `ProgressDialog`,
   `TqdmToProgressDialog`, `ensure_extras_installed`: the async +
   extras helpers that every pipeline module uses.
@@ -48,8 +55,8 @@ dialog.
 ## Layout
 
 - `CMakeLists.txt` — extension metadata.
-- Eleven `KWNeuro*/` scripted-module directories (KWNeuroEnvironment
-  plus ten pipeline modules), each with `*.py`, `Resources/UI/*.ui`,
+- Fifteen `KWNeuro*/` scripted-module directories (KWNeuroEnvironment
+  plus pipeline modules), each with `*.py`, `Resources/UI/*.ui`,
   `Testing/Python/test_*.py`.
 - `kwneuro_slicer_bridge/` — bundled Python package (built via
   `slicerMacroBuildScriptedModule` like a library "module"; ends up
@@ -65,7 +72,7 @@ Launch Slicer with the extension (either via the Extension Manager
 once released, or a build-tree launcher during development — see
 *Development* below).
 
-**Typical single-subject flow** (matches the notebook at
+**Typical diffusion flow** (matches the notebook at
 `notebooks/kwneuro-pipeline-walkthrough.py`):
 
 1. **KWNeuro Environment**: click *Install / Update* to install (or
@@ -73,8 +80,8 @@ once released, or a build-tree launcher during development — see
    optional extras you need. The `kwneuro_slicer_bridge` package
    ships with the extension and needs no install.
 2. **KWNeuro Importer**: either load your own DWI (pick the NIfTI,
-   `.bval`, `.bvec` files + a node name) or click *Load Sherbrooke
-   3-shell* for sample data.
+   `.bval`, `.bvec` files + a node name) or click a DWI sample-data
+   button.
 3. **KWNeuro Denoise** (optional): patch2self denoising.
 4. **KWNeuro Brain Extract** (optional, needs `hdbet`): HD-BET mask.
 5. **KWNeuro DTI**: fit the tensor. Accepts a scalar / labelmap /
@@ -82,6 +89,17 @@ once released, or a build-tree launcher during development — see
    appears when a segmentation is selected.
 6. **KWNeuro CSD** / **KWNeuro NODDI** / **KWNeuro TractSeg**: any
    of the model-fit modules.
+
+**Typical structural + diffusion flow**:
+
+1. **KWNeuro Importer**: load a T1/structural NIfTI and a DWI, or use
+   the ds000221 multimodal sample button.
+2. **KWNeuro Bias Correct**: apply N4 to the structural image.
+3. **KWNeuro Brain Extract**: create a structural or DWI brain mask.
+4. **KWNeuro Tissue Segment** / **KWNeuro Parcellate**: create
+   labelmap outputs from the corrected structural image.
+5. **KWNeuro DWI To Structural Register**: register mean-b0 to T1 and
+   optionally inverse-warp structural labels into DWI space.
 
 **Multi-volume modules** (operate on two or more volumes at once):
 
@@ -137,7 +155,7 @@ build-tree's module paths — the KWNeuro modules appear under
 Open **KWNeuro Environment** and click **Install / Update**. That
 pip-installs the `kwneuro` library from its pinned git ref into
 Slicer's Python. Then tick any optional-extra checkboxes you want
-(`hdbet`, `noddi`, `tractseg`, `combat`); the panel drives
+(`hdbet`, `noddi`, `tractseg`, `combat`, `antspynet`); the panel drives
 `slicer.packaging.pip_install` for each, including the
 `skip_packages=["fury"]` dance TractSeg needs.
 
@@ -163,10 +181,10 @@ cd /tmp/kwneuro-extn-build
 ctest -j$(nproc) --output-on-failure --no-tests=error
 ```
 
-Expected: **38 tests, all pass in ~2-3 min**. The test count is
-stable regardless of which extras are installed — almost every
+Expected: all tests pass in a few minutes. List the exact count with
+`ctest -N`; it changes as scripted modules are added. Almost every
 module's tests either use synthetic data or mock the optional
-dependency (HD-BET, AMICO, TractSeg). The one exception is
+dependency (HD-BET, AMICO, TractSeg, ANTsPyNet). The one exception is
 `py_test_kwneuroharmonize`, which fails rather than skips without
 the `combat` extra.
 

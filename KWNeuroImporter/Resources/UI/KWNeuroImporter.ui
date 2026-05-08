@@ -119,6 +119,67 @@
     </widget>
    </item>
    <item>
+    <widget class="ctkCollapsibleButton" name="importStructuralCollapsibleButton">
+     <property name="text">
+      <string>Import structural image from disk</string>
+     </property>
+     <layout class="QFormLayout" name="importStructuralFormLayout">
+      <item row="0" column="0">
+       <widget class="QLabel" name="structuralPathLabel">
+        <property name="text">
+         <string>NIfTI volume:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="ctkPathLineEdit" name="structuralPathLineEdit">
+        <property name="toolTip">
+         <string>3D NIfTI file containing a structural image such as a T1-weighted volume.</string>
+        </property>
+        <property name="nameFilters">
+         <stringlist>
+          <string>NIfTI (*.nii *.nii.gz)</string>
+         </stringlist>
+        </property>
+        <property name="filters">
+         <set>ctkPathLineEdit::Files|ctkPathLineEdit::Readable</set>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="structuralNameLabel">
+        <property name="text">
+         <string>Node name:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="QLineEdit" name="structuralNameLineEdit">
+        <property name="toolTip">
+         <string>Name for the created vtkMRMLScalarVolumeNode in the scene.</string>
+        </property>
+        <property name="text">
+         <string>t1</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0" colspan="2">
+       <widget class="QPushButton" name="loadStructuralButton">
+        <property name="text">
+         <string>Load structural image</string>
+        </property>
+        <property name="toolTip">
+         <string>Read the NIfTI file from disk and push a vtkMRMLScalarVolumeNode into the scene using InSceneStructuralImage.</string>
+        </property>
+        <property name="enabled">
+         <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
     <widget class="ctkCollapsibleButton" name="sampleDataCollapsibleButton">
      <property name="text">
       <string>Sample data</string>
@@ -151,6 +212,16 @@
         </property>
         <property name="toolTip">
          <string>Download (if needed) and load the EDDEN single-subject HCP-protocol DWI (OpenNeuro ds004666 sub-01 ses-1p5mm AVG_complex derivative). 270 directions across b=1000/2000/3000 at 1.5 mm isotropic — the closest publicly redistributable match to the HCP-YA acquisition TractSeg was trained on. CC0 license. Cached at ~/.kwneuro_sample_data/edden_ds004666_ses-1p5mm/ after the first ~1.8 GB download.</string>
+        </property>
+       </widget>
+      </item>
+      <item>
+       <widget class="QPushButton" name="loadDs000221Button">
+        <property name="text">
+         <string>Load ds000221 T1 + DWI (sub-010002 ses-01)</string>
+        </property>
+        <property name="toolTip">
+         <string>Download (if needed) and load the OpenNeuro ds000221 LEMON subject sub-010002 ses-01 structural T1w image plus DWI NIfTI, bval, and bvec. Cached at ~/.kwneuro_sample_data/ds000221_sub-010002_ses-01/ after the first download.</string>
         </property>
        </widget>
       </item>

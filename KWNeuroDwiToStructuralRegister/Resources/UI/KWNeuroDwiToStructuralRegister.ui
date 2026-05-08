@@ -1,0 +1,286 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ui version="4.0">
+ <class>KWNeuroDwiToStructuralRegister</class>
+ <widget class="qMRMLWidget" name="KWNeuroDwiToStructuralRegister">
+  <property name="geometry">
+   <rect>
+    <x>0</x>
+    <y>0</y>
+    <width>520</width>
+    <height>430</height>
+   </rect>
+  </property>
+  <layout class="QVBoxLayout" name="verticalLayout">
+   <item>
+    <widget class="ctkCollapsibleButton" name="inputsCollapsibleButton">
+     <property name="text">
+      <string>Inputs</string>
+     </property>
+     <layout class="QFormLayout" name="inputsFormLayout">
+      <item row="0" column="0">
+       <widget class="QLabel" name="dwiLabel">
+        <property name="text">
+         <string>DWI:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="0" column="1">
+       <widget class="qMRMLNodeComboBox" name="dwiSelector">
+        <property name="nodeTypes">
+         <stringlist notr="true">
+          <string>vtkMRMLDiffusionWeightedVolumeNode</string>
+         </stringlist>
+        </property>
+        <property name="showChildNodeTypes">
+         <bool>false</bool>
+        </property>
+        <property name="addEnabled">
+         <bool>false</bool>
+        </property>
+        <property name="removeEnabled">
+         <bool>false</bool>
+        </property>
+        <property name="noneEnabled">
+         <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="0">
+       <widget class="QLabel" name="structuralLabel">
+        <property name="text">
+         <string>Structural image:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="1" column="1">
+       <widget class="qMRMLNodeComboBox" name="structuralSelector">
+        <property name="nodeTypes">
+         <stringlist notr="true">
+          <string>vtkMRMLScalarVolumeNode</string>
+         </stringlist>
+        </property>
+        <property name="showChildNodeTypes">
+         <bool>false</bool>
+        </property>
+        <property name="addEnabled">
+         <bool>false</bool>
+        </property>
+        <property name="removeEnabled">
+         <bool>false</bool>
+        </property>
+        <property name="noneEnabled">
+         <bool>false</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="0">
+       <widget class="QLabel" name="dwiMaskLabel">
+        <property name="text">
+         <string>DWI mask:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="2" column="1">
+       <widget class="qMRMLNodeComboBox" name="dwiMaskSelector">
+        <property name="nodeTypes">
+         <stringlist notr="true">
+          <string>vtkMRMLScalarVolumeNode</string>
+          <string>vtkMRMLLabelMapVolumeNode</string>
+         </stringlist>
+        </property>
+        <property name="showChildNodeTypes">
+         <bool>false</bool>
+        </property>
+        <property name="addEnabled">
+         <bool>false</bool>
+        </property>
+        <property name="removeEnabled">
+         <bool>false</bool>
+        </property>
+        <property name="noneEnabled">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="0">
+       <widget class="QLabel" name="structuralMaskLabel">
+        <property name="text">
+         <string>Structural mask:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="3" column="1">
+       <widget class="qMRMLNodeComboBox" name="structuralMaskSelector">
+        <property name="nodeTypes">
+         <stringlist notr="true">
+          <string>vtkMRMLScalarVolumeNode</string>
+          <string>vtkMRMLLabelMapVolumeNode</string>
+         </stringlist>
+        </property>
+        <property name="showChildNodeTypes">
+         <bool>false</bool>
+        </property>
+        <property name="addEnabled">
+         <bool>false</bool>
+        </property>
+        <property name="removeEnabled">
+         <bool>false</bool>
+        </property>
+        <property name="noneEnabled">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="0">
+       <widget class="QLabel" name="structuralLabelmapLabel">
+        <property name="text">
+         <string>Structural labels:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="4" column="1">
+       <widget class="qMRMLNodeComboBox" name="structuralLabelSelector">
+        <property name="nodeTypes">
+         <stringlist notr="true">
+          <string>vtkMRMLLabelMapVolumeNode</string>
+         </stringlist>
+        </property>
+        <property name="showChildNodeTypes">
+         <bool>false</bool>
+        </property>
+        <property name="addEnabled">
+         <bool>false</bool>
+        </property>
+        <property name="removeEnabled">
+         <bool>false</bool>
+        </property>
+        <property name="noneEnabled">
+         <bool>true</bool>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="0">
+       <widget class="QLabel" name="transformTypeLabel">
+        <property name="text">
+         <string>Transform:</string>
+        </property>
+       </widget>
+      </item>
+      <item row="5" column="1">
+       <widget class="QComboBox" name="transformTypeComboBox">
+        <item>
+         <property name="text">
+          <string>Rigid</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>Affine</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>SyN</string>
+         </property>
+        </item>
+        <item>
+         <property name="text">
+          <string>SyNRA</string>
+         </property>
+        </item>
+       </widget>
+      </item>
+     </layout>
+    </widget>
+   </item>
+   <item>
+    <widget class="QPushButton" name="applyButton">
+     <property name="text">
+      <string>Apply</string>
+     </property>
+     <property name="enabled">
+      <bool>false</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <widget class="QLabel" name="resultLabel">
+     <property name="text">
+      <string>(not run)</string>
+     </property>
+     <property name="textInteractionFlags">
+      <set>Qt::TextSelectableByMouse</set>
+     </property>
+     <property name="wordWrap">
+      <bool>true</bool>
+     </property>
+    </widget>
+   </item>
+   <item>
+    <spacer name="verticalSpacer">
+     <property name="orientation">
+      <enum>Qt::Vertical</enum>
+     </property>
+     <property name="sizeHint" stdset="0">
+      <size>
+       <width>20</width>
+       <height>40</height>
+      </size>
+     </property>
+    </spacer>
+   </item>
+  </layout>
+ </widget>
+ <customwidgets>
+  <customwidget>
+   <class>qMRMLWidget</class>
+   <extends>QWidget</extends>
+   <header>qMRMLWidget.h</header>
+   <container>1</container>
+  </customwidget>
+  <customwidget>
+   <class>qMRMLNodeComboBox</class>
+   <extends>QWidget</extends>
+   <header>qMRMLNodeComboBox.h</header>
+  </customwidget>
+  <customwidget>
+   <class>ctkCollapsibleButton</class>
+   <extends>QWidget</extends>
+   <header>ctkCollapsibleButton.h</header>
+   <container>1</container>
+  </customwidget>
+ </customwidgets>
+ <resources/>
+ <connections>
+  <connection>
+   <sender>KWNeuroDwiToStructuralRegister</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>dwiSelector</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+  </connection>
+  <connection>
+   <sender>KWNeuroDwiToStructuralRegister</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>structuralSelector</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+  </connection>
+  <connection>
+   <sender>KWNeuroDwiToStructuralRegister</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>dwiMaskSelector</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+  </connection>
+  <connection>
+   <sender>KWNeuroDwiToStructuralRegister</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>structuralMaskSelector</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+  </connection>
+  <connection>
+   <sender>KWNeuroDwiToStructuralRegister</sender>
+   <signal>mrmlSceneChanged(vtkMRMLScene*)</signal>
+   <receiver>structuralLabelSelector</receiver>
+   <slot>setMRMLScene(vtkMRMLScene*)</slot>
+  </connection>
+ </connections>
+</ui>

@@ -477,7 +477,7 @@ def ensure_extras_installed(names: list[str]) -> None:
 
     ``names`` elements must match keys in
     ``KWNeuroEnvironment.EXTRAS_INSTALL_SPEC``
-    (``hdbet``/``noddi``/``tractseg``/``combat``). The error message
+    (``hdbet``/``noddi``/``tractseg``/``combat``/``antspynet``). The error message
     nudges the user at the KWNeuroEnvironment panel so they can fix
     it with a checkbox click rather than manual pip.
     """

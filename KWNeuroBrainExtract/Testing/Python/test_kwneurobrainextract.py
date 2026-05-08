@@ -4,9 +4,9 @@ HD-BET's real deep-learning model is heavy and not exercised in ctest.
 Instead:
 
 * ``run_brain_extract`` is covered by monkey-patching
-  ``kwneuro.masks.brain_extract_single`` to write a synthetic mask
-  NIfTI at the output path — this verifies our wrapping / error
-  handling around HD-BET without the GPU / model weights cost.
+  ``kwneuro.masks.brain_extract`` to return a synthetic mask — this
+  verifies our wrapping / error handling around HD-BET without the
+  GPU / model weights cost.
 * ``prepare_inputs`` is covered with an explicit
   ``ensure_extras_installed`` check — if the hdbet extra is absent
   (common in test environments), the error should be the
@@ -21,7 +21,6 @@ The widget test covers Apply-button-tracks-input.
 from __future__ import annotations
 
 import unittest
-from pathlib import Path
 
 import numpy as np
 
@@ -83,56 +82,55 @@ class TestKWNeuroBrainExtractLogic(unittest.TestCase):
         np.testing.assert_allclose(in_scene.get_affine(), affine)
 
     def test_run_brain_extract_with_mocked_hdbet(self) -> None:
-        """Monkey-patch brain_extract_single to verify wrapping is correct.
+        """Monkey-patch brain_extract to verify wrapping is correct.
 
         The real HD-BET requires GPU + model weights and is not suitable
         for ctest; we stub it to a function that just writes a synthetic
-        mask NIfTI, so the test still covers our tmpdir + load-result
-        plumbing.
+        mask resource, so the test still covers our tmpdir +
+        load-result plumbing.
 
         We also assert the mock was actually invoked — if
         ``run_brain_extract`` ever stops routing through
-        ``kwneuro.masks.brain_extract_single`` (e.g. someone refactors
+        ``kwneuro.masks.brain_extract`` (e.g. someone refactors
         to a hoisted top-level import bound to a different symbol), the
         mock would silently miss and the test would start hitting real
         HD-BET. The ``call_count`` assertion catches that.
         """
         import kwneuro.masks as masks_mod
 
-        from kwneuro.io import NiftiVolumeResource
         from kwneuro.resource import InMemoryVolumeResource
         from KWNeuroBrainExtract import KWNeuroBrainExtractLogic
 
         dwi = _synthetic_dwi()
-        mock_mask = (dwi.volume.get_array() > 400).any(axis=-1).astype("uint8")
+        mean_b0 = dwi.compute_mean_b0()
+        mock_mask = (mean_b0.get_array() > 400).astype("uint8")
         call_count = [0]
         captured_kwargs: dict = {}
 
-        def fake_brain_extract_single(dwi_arg, output_path, **kwargs):
+        def fake_brain_extract(volume, output_path, **kwargs):
             call_count[0] += 1
             captured_kwargs.update(kwargs)
-            output_path = Path(output_path)
-            resource = NiftiVolumeResource.save(
-                InMemoryVolumeResource(
-                    array=mock_mask,
-                    affine=dwi_arg.volume.get_affine(),
-                    metadata={},
-                ),
-                output_path,
+            np.testing.assert_allclose(volume.get_array(), mean_b0.get_array())
+            return InMemoryVolumeResource(
+                array=mock_mask,
+                affine=volume.get_affine(),
+                metadata={"xyzt_units": 2},
             )
-            return resource
 
-        original = masks_mod.brain_extract_single
-        masks_mod.brain_extract_single = fake_brain_extract_single
+        original = getattr(masks_mod, "brain_extract", None)
+        masks_mod.brain_extract = fake_brain_extract
         try:
             logic = KWNeuroBrainExtractLogic()
-            mask_resource = logic.run_brain_extract(dwi)
+            mask_resource = logic.run_brain_extract(mean_b0)
         finally:
-            masks_mod.brain_extract_single = original
+            if original is None:
+                delattr(masks_mod, "brain_extract")
+            else:
+                masks_mod.brain_extract = original
 
         self.assertEqual(
             call_count[0], 1,
-            "brain_extract_single must be invoked exactly once via the "
+            "brain_extract must be invoked exactly once via the "
             "patched kwneuro.masks symbol. If this fails, the module "
             "has a different import path that skipped the mock — which "
             "would cause real HD-BET to run in CI.",
@@ -145,9 +143,7 @@ class TestKWNeuroBrainExtractLogic(unittest.TestCase):
         )
         self.assertTrue(mask_resource.is_loaded)
         np.testing.assert_array_equal(mask_resource.get_array(), mock_mask)
-        np.testing.assert_allclose(
-            mask_resource.get_affine(), dwi.volume.get_affine(),
-        )
+        np.testing.assert_allclose(mask_resource.get_affine(), mean_b0.get_affine())
 
     def test_prepare_inputs_checks_hdbet_extra_explicitly(self) -> None:
         """prepare_inputs must query the 'hdbet' extra specifically.
@@ -197,7 +193,7 @@ class TestKWNeuroBrainExtractLogic(unittest.TestCase):
             # Negative check: the error must NOT claim a different
             # extra is missing, which would indicate the code asked
             # for the wrong one.
-            for wrong in ("noddi", "tractseg", "combat"):
+            for wrong in ("noddi", "tractseg", "combat", "antspynet"):
                 self.assertNotIn(
                     f"[{wrong}]", err,
                     f"Error mentions kwneuro[{wrong}] — the module is "
@@ -213,9 +209,10 @@ class TestKWNeuroBrainExtractLogic(unittest.TestCase):
             present_status,
         )
         try:
-            dwi, name = logic.prepare_inputs(sdwi.get_node())
-            self.assertIsNotNone(dwi)
+            volume, name = logic.prepare_inputs(sdwi.get_node())
+            self.assertIsNotNone(volume)
             self.assertEqual(name, "bet_extras_check")
+            self.assertEqual(volume.get_array().ndim, 3)
         finally:
             KWNeuroEnvironment.KWNeuroEnvironmentLogic.extras_status = (
                 staticmethod(original_status)
@@ -324,6 +321,23 @@ class TestKWNeuroBrainExtractWidget(unittest.TestCase):
         self.assertFalse(widget.ui.applyButton.enabled)
 
         InSceneDwi.from_dwi(_synthetic_dwi(), name="bet_widget_dwi")
+        self._pump()
+        self.assertTrue(widget.ui.applyButton.enabled)
+
+    def test_apply_enables_when_structural_added(self) -> None:
+        from kwneuro.resource import InMemoryVolumeResource
+        from kwneuro_slicer_bridge import InSceneVolumeResource
+
+        widget = self._widget()
+        self._pump()
+        self.assertFalse(widget.ui.applyButton.enabled)
+
+        arr = np.ones((4, 5, 6), dtype=np.float32)
+        affine = np.diag([1.0, 1.0, 1.0, 1.0])
+        InSceneVolumeResource.from_resource(
+            InMemoryVolumeResource(array=arr, affine=affine, metadata={}),
+            name="bet_widget_t1",
+        )
         self._pump()
         self.assertTrue(widget.ui.applyButton.enabled)
 

@@ -1,4 +1,4 @@
-"""KWNeuroImporter - load a DWI into the scene from disk, or fetch dipy sample data.
+"""KWNeuroImporter - load DWI and structural images into the scene.
 
 Why this module exists: Slicer's built-in Add Data dialog loads 4D
 NIfTI volumes as ``vtkMRMLScalarVolumeNode`` and silently drops the
@@ -6,7 +6,9 @@ NIfTI volumes as ``vtkMRMLScalarVolumeNode`` and silently drops the
 to the volume node. The bridge already provides
 :meth:`InSceneDwi.from_nifti_path` that does the right thing via
 ``vtkMRMLDiffusionWeightedVolumeNode`` — this module exposes that
-one-liner as a GUI.
+one-liner as a GUI. Structural NIfTI import is intentionally simpler:
+it loads one 3D NIfTI and publishes a scalar volume node that also
+round-trips as ``kwneuro.structural.StructuralImage``.
 
 Structure:
 
@@ -23,6 +25,9 @@ Structure:
       but TractSeg's training distribution is HCP-acquired data;
       results on CENIR are denser but still don't fully match what
       TractSeg can produce on real HCP data.
+    * OpenNeuro ds000221 sub-010002 ses-01 multimodal T1 + DWI —
+      cached under ``~/.kwneuro_sample_data/`` and useful for testing
+      the structural + diffusion registration workflow.
 
   Both also register with Slicer's standard *Sample Data* module so
   they appear there alongside MRHead etc.
@@ -60,11 +65,11 @@ class KWNeuroImporter(ScriptedLoadableModule):
         self.parent.dependencies = []
         self.parent.contributors = ["Ebrahim Ebrahim (Kitware, Inc.)"]
         self.parent.helpText = _(
-            "Load a DWI from disk into the Slicer scene via the kwneuro "
-            "bridge (preserving the 4th dimension and attaching "
-            "gradients + b-values). Also exposes one-click fetch of two "
-            "dipy DWI sample datasets (Sherbrooke 3-shell and CENIR "
-            "multi-shell)."
+            "Load DWI and structural NIfTI images into the Slicer scene "
+            "via the kwneuro bridge. DWI import preserves the 4th "
+            "dimension and attaches gradients + b-values. Sample-data "
+            "buttons cover diffusion-only and multimodal structural + "
+            "diffusion workflows."
         )
         self.parent.acknowledgementText = _(
             "Developed at Kitware, Inc. as part of the brain microstructure "
@@ -100,7 +105,7 @@ def _register_kwneuro_sample_data() -> None:
                         "skipping sample-data registration")
         return
 
-    category = "KWNeuro DWI"
+    category = "KWNeuro Sample Data"
     existing_names = {
         src.sampleName
         for src in SampleData.SampleDataLogic.sampleDataSourcesByCategory(category)
@@ -130,11 +135,18 @@ def _register_kwneuro_sample_data() -> None:
     def _download_edden(_source: Any) -> None:
         KWNeuroImporterLogic().load_edden()
 
+    def _download_ds000221(_source: Any) -> None:
+        KWNeuroImporterLogic().load_ds000221_multimodal()
+
     _register("Sherbrooke 3-shell HARDI", _download_sherbrooke)
     _register("CENIR multi-shell HARDI (b=1000/2000/3000, ~1.7 GB)", _download_cenir)
     _register(
         "EDDEN HCP-protocol DWI (OpenNeuro ds004666 sub-01, ~1.8 GB)",
         _download_edden,
+    )
+    _register(
+        "LEMON multimodal T1 + DWI (OpenNeuro ds000221 sub-010002 ses-01)",
+        _download_ds000221,
     )
 
 
@@ -190,6 +202,21 @@ class KWNeuroImporterLogic(ScriptedLoadableModuleLogic):
             NiftiVolumeResource(Path(volume_path)),
             FslBvalResource(Path(bval_path)),
             FslBvecResource(Path(bvec_path)),
+        ).load()
+
+    @staticmethod
+    def load_structural_from_disk(volume_path: Path) -> Any:
+        """Read a structural NIfTI from disk. **Thread-safe.**"""
+        from kwneuro.io import NiftiVolumeResource
+        from kwneuro.structural import StructuralImage
+
+        if not Path(volume_path).exists():
+            msg = f"structural volume file not found at {volume_path!r}"
+            raise FileNotFoundError(msg)
+
+        logging.info("KWNeuroImporter: loading structural NIfTI %s", volume_path)
+        return StructuralImage(
+            volume=NiftiVolumeResource(Path(volume_path)),
         ).load()
 
     @staticmethod
@@ -275,6 +302,66 @@ class KWNeuroImporterLogic(ScriptedLoadableModuleLogic):
             )
 
         return files["volume"][1], files["bval"][1], files["bvec"][1]
+
+    @staticmethod
+    def fetch_ds000221_multimodal_paths(
+        progress_callback: Any = None,
+    ) -> tuple[Path, Path, Path, Path]:
+        """Fetch OpenNeuro ds000221 sub-010002 ses-01 T1w + DWI files.
+
+        **Thread-safe.** Returns ``(t1_path, dwi_path, bval_path, bvec_path)``.
+        Files are cached under
+        ``~/.kwneuro_sample_data/ds000221_sub-010002_ses-01/``.
+        """
+        cache_dir = (
+            Path.home()
+            / ".kwneuro_sample_data"
+            / "ds000221_sub-010002_ses-01"
+        )
+        cache_dir.mkdir(parents=True, exist_ok=True)
+
+        s3_root = "https://s3.amazonaws.com/openneuro.org/ds000221"
+        files = {
+            "t1": (
+                f"{s3_root}/sub-010002/ses-01/anat/"
+                "sub-010002_ses-01_acq-mp2rage_T1w.nii.gz",
+                cache_dir / "sub-010002_ses-01_acq-mp2rage_T1w.nii.gz",
+            ),
+            "dwi": (
+                f"{s3_root}/sub-010002/ses-01/dwi/"
+                "sub-010002_ses-01_dwi.nii.gz",
+                cache_dir / "sub-010002_ses-01_dwi.nii.gz",
+            ),
+            "bval": (
+                f"{s3_root}/sub-010002/ses-01/dwi/"
+                "sub-010002_ses-01_dwi.bval",
+                cache_dir / "sub-010002_ses-01_dwi.bval",
+            ),
+            "bvec": (
+                f"{s3_root}/sub-010002/ses-01/dwi/"
+                "sub-010002_ses-01_dwi.bvec",
+                cache_dir / "sub-010002_ses-01_dwi.bvec",
+            ),
+        }
+
+        for label, (url, dest) in files.items():
+            if dest.exists() and dest.stat().st_size > 0:
+                continue
+            logging.info(
+                "KWNeuroImporter: downloading ds000221 %s from %s", label, url,
+            )
+            if progress_callback is not None:
+                progress_callback(f"Downloading ds000221 {label} ({url})...")
+            KWNeuroImporterLogic._download_with_progress(
+                url, dest, label, progress_callback,
+            )
+
+        return (
+            files["t1"][1],
+            files["dwi"][1],
+            files["bval"][1],
+            files["bvec"][1],
+        )
 
     @staticmethod
     def _download_with_progress(
@@ -410,6 +497,21 @@ class KWNeuroImporterLogic(ScriptedLoadableModuleLogic):
             raise
         return scene_dwi.node_id
 
+    def publish_structural_to_scene(self, structural: Any, name: str) -> str:
+        """Push a kwneuro StructuralImage into the scene. **Main thread only.**"""
+        from kwneuro_slicer_bridge import InSceneStructuralImage
+
+        scene_structural = InSceneStructuralImage.from_structural(
+            structural, name=name,
+        )
+        try:
+            scene_structural.get_node().CreateDefaultDisplayNodes()
+            slicer.util.setSliceViewerLayers(background=scene_structural.get_node())
+        except BaseException:
+            slicer.mrmlScene.RemoveNode(scene_structural.get_node())
+            raise
+        return scene_structural.node_id
+
     def load_from_paths(
         self,
         volume_path: Path,
@@ -424,6 +526,11 @@ class KWNeuroImporterLogic(ScriptedLoadableModuleLogic):
         """
         dwi = self.load_dwi_from_disk(volume_path, bval_path, bvec_path)
         return self.publish_to_scene(dwi, name)
+
+    def load_structural_from_path(self, volume_path: Path, name: str) -> str:
+        """Synchronous structural import; composes load + publish."""
+        structural = self.load_structural_from_disk(volume_path)
+        return self.publish_structural_to_scene(structural, name)
 
     def load_sherbrooke(self, name: str = "HARDI193") -> str:
         """Synchronous Sherbrooke fetch + load; composes the three phases."""
@@ -441,6 +548,22 @@ class KWNeuroImporterLogic(ScriptedLoadableModuleLogic):
         volume, bval, bvec = self.fetch_edden_paths()
         dwi = self.load_dwi_from_disk(volume, bval, bvec)
         return self.publish_to_scene(dwi, name)
+
+    def load_ds000221_multimodal(
+        self,
+        structural_name: str = "ds000221_sub-010002_ses-01_T1w",
+        dwi_name: str = "ds000221_sub-010002_ses-01_DWI",
+    ) -> dict[str, str]:
+        """Synchronous OpenNeuro ds000221 fetch + structural/DWI load."""
+        t1, dwi_path, bval, bvec = self.fetch_ds000221_multimodal_paths()
+        structural = self.load_structural_from_disk(t1)
+        dwi = self.load_dwi_from_disk(dwi_path, bval, bvec)
+        return {
+            "structural": self.publish_structural_to_scene(
+                structural, structural_name,
+            ),
+            "dwi": self.publish_to_scene(dwi, dwi_name),
+        }
 
 
 #
@@ -469,6 +592,15 @@ class KWNeuroImporterWidget(ScriptedLoadableModuleWidget):
             )
         self.ui.nameLineEdit.connect("textChanged(QString)", self._updateLoadEnabled)
         self.ui.loadButton.connect("clicked(bool)", self.onLoadClicked)
+        self.ui.structuralPathLineEdit.connect(
+            "currentPathChanged(QString)", self._updateStructuralLoadEnabled,
+        )
+        self.ui.structuralNameLineEdit.connect(
+            "textChanged(QString)", self._updateStructuralLoadEnabled,
+        )
+        self.ui.loadStructuralButton.connect(
+            "clicked(bool)", self.onLoadStructuralClicked,
+        )
         self.ui.loadSherbrookeButton.connect(
             "clicked(bool)", self.onLoadSherbrookeClicked,
         )
@@ -478,11 +610,16 @@ class KWNeuroImporterWidget(ScriptedLoadableModuleWidget):
         self.ui.loadEddenButton.connect(
             "clicked(bool)", self.onLoadEddenClicked,
         )
+        self.ui.loadDs000221Button.connect(
+            "clicked(bool)", self.onLoadDs000221Clicked,
+        )
 
         self._updateLoadEnabled()
+        self._updateStructuralLoadEnabled()
 
     def enter(self) -> None:
         self._updateLoadEnabled()
+        self._updateStructuralLoadEnabled()
 
     def _updateLoadEnabled(self, *_args: Any) -> None:
         paths_set = all(
@@ -494,6 +631,12 @@ class KWNeuroImporterWidget(ScriptedLoadableModuleWidget):
         )
         name_set = bool(self.ui.nameLineEdit.text.strip())
         self.ui.loadButton.enabled = paths_set and name_set
+
+    def _updateStructuralLoadEnabled(self, *_args: Any) -> None:
+        self.ui.loadStructuralButton.enabled = (
+            bool(self.ui.structuralPathLineEdit.currentPath)
+            and bool(self.ui.structuralNameLineEdit.text.strip())
+        )
 
     def onLoadClicked(self) -> None:
         from kwneuro_slicer_bridge import run_with_progress_dialog
@@ -511,6 +654,23 @@ class KWNeuroImporterWidget(ScriptedLoadableModuleWidget):
                 status=_("Reading DWI from disk..."),
             )
             node_id = self.logic.publish_to_scene(dwi, name)
+            self._updateResultLabel(node_id)
+
+    def onLoadStructuralClicked(self) -> None:
+        from kwneuro_slicer_bridge import run_with_progress_dialog
+
+        volume = Path(self.ui.structuralPathLineEdit.currentPath)
+        name = self.ui.structuralNameLineEdit.text.strip()
+
+        with slicer.util.tryWithErrorDisplay(
+            _("Failed to load structural image."), waitCursor=False,
+        ):
+            structural = run_with_progress_dialog(
+                lambda: self.logic.load_structural_from_disk(volume),
+                title=_("KWNeuroImporter"),
+                status=_("Reading structural NIfTI from disk..."),
+            )
+            node_id = self.logic.publish_structural_to_scene(structural, name)
             self._updateResultLabel(node_id)
 
     def onLoadSherbrookeClicked(self) -> None:
@@ -560,6 +720,45 @@ class KWNeuroImporterWidget(ScriptedLoadableModuleWidget):
             )
             node_id = self.logic.publish_to_scene(dwi, "EDDEN_HCP_protocol")
             self._updateResultLabel(node_id)
+
+    def onLoadDs000221Clicked(self) -> None:
+        import queue as _queue
+
+        from kwneuro_slicer_bridge import run_with_progress_dialog
+
+        progress_queue: _queue.Queue = _queue.Queue()
+
+        def _worker() -> tuple[Any, Any]:
+            t1, dwi_path, bval, bvec = self.logic.fetch_ds000221_multimodal_paths(
+                progress_callback=progress_queue.put_nowait,
+            )
+            structural = self.logic.load_structural_from_disk(t1)
+            dwi = self.logic.load_dwi_from_disk(dwi_path, bval, bvec)
+            return structural, dwi
+
+        with slicer.util.tryWithErrorDisplay(
+            _("Failed to fetch / load ds000221 multimodal sample data."),
+            waitCursor=False,
+        ):
+            structural, dwi = run_with_progress_dialog(
+                _worker,
+                title=_("KWNeuroImporter"),
+                status=_("Fetching ds000221 T1 + DWI..."),
+                progress_queue=progress_queue,
+            )
+            structural_id = self.logic.publish_structural_to_scene(
+                structural, "ds000221_sub-010002_ses-01_T1w",
+            )
+            dwi_id = self.logic.publish_to_scene(
+                dwi, "ds000221_sub-010002_ses-01_DWI",
+            )
+            structural_node = slicer.mrmlScene.GetNodeByID(structural_id)
+            dwi_node = slicer.mrmlScene.GetNodeByID(dwi_id)
+            self.ui.resultLabel.text = (
+                "Loaded: "
+                f"{structural_node.GetName() if structural_node else structural_id}, "
+                f"{dwi_node.GetName() if dwi_node else dwi_id}"
+            )
 
     def _run_sample_load(
         self,

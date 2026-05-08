@@ -1,6 +1,6 @@
 # Bridge reference
 
-The `kwneuro_slicer_bridge` package provides four scene-backed classes
+The `kwneuro_slicer_bridge` package provides scene-backed classes
 that let kwneuro domain objects live in Slicer's MRML scene. This page
 is the high-level architectural reference; method-level documentation
 lives under {doc}`autoapi/index`.
@@ -12,6 +12,7 @@ lives under {doc}`autoapi/index`.
 | `InSceneVolumeResource` | `vtkMRMLScalarVolumeNode` (3D) or `vtkMRMLVectorVolumeNode` (4D) | subclass of `kwneuro.resource.VolumeResource` |
 | `InSceneDwi` | `vtkMRMLDiffusionWeightedVolumeNode` | **subclass of `kwneuro.dwi.Dwi`** |
 | `InSceneDti` | `vtkMRMLDiffusionTensorVolumeNode` | **subclass of `kwneuro.dti.Dti`** |
+| `InSceneStructuralImage` | `vtkMRMLScalarVolumeNode` | **subclass of `kwneuro.structural.StructuralImage`** |
 | `InSceneTransformResource` | list of `vtkMRMLLinearTransformNode` / `vtkMRMLGridTransformNode` | standalone wrapper; kwneuro's `TransformResource` is file-based and doesn't fit scene-node semantics cleanly |
 
 The `InScene` prefix sits on the storage-location axis alongside
@@ -19,7 +20,7 @@ kwneuro's existing `InMemoryVolumeResource` / `NiftiVolumeResource`.
 `VolumeResource` data can live in memory, on disk as NIfTI, or (with
 this package) in a Slicer scene node.
 
-## Why subclass `Dwi` / `Dti`?
+## Why subclass `Dwi` / `Dti` / `StructuralImage`?
 
 So that `InSceneDwi` IS-A `kwneuro.dwi.Dwi`. Any pipeline function that
 takes a `Dwi` accepts an `InSceneDwi` directly — no conversion step
@@ -32,9 +33,10 @@ dti      = sdwi.estimate_dti()        # inherited
 mean_b0  = sdwi.compute_mean_b0()     # inherited
 ```
 
-Same for `InSceneDti` / `Dti`. The inherited fields (`volume`, `bval`,
-`bvec` on Dwi; `volume` on Dti) are populated from the scene node at
-construction.
+Same for `InSceneDti` / `Dti` and `InSceneStructuralImage` /
+`StructuralImage`. The inherited fields (`volume`, `bval`, `bvec` on
+Dwi; `volume` on Dti and StructuralImage) are populated from the
+scene node at construction.
 
 ## Round-trips and coordinate conventions
 
@@ -118,6 +120,8 @@ kwneuro value fully detached from the scene:
 - `InSceneVolumeResource.to_in_memory() -> InMemoryVolumeResource`
 - `InSceneDwi.to_in_memory() -> Dwi` (a plain `kwneuro.dwi.Dwi`)
 - `InSceneDti.to_in_memory() -> Dti` (a plain `kwneuro.dti.Dti`)
+- `InSceneStructuralImage.to_in_memory() -> StructuralImage` (a plain
+  `kwneuro.structural.StructuralImage`)
 
 For day-to-day pipeline use, you usually don't need `to_in_memory()` —
 `InSceneDwi` / `InSceneDti` are already usable as `Dwi` / `Dti` via

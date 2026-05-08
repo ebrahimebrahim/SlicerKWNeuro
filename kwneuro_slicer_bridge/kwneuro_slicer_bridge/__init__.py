@@ -14,16 +14,27 @@ from kwneuro_slicer_bridge.async_helpers import (
 )
 from kwneuro_slicer_bridge.dti import InSceneDti
 from kwneuro_slicer_bridge.dwi import InSceneDwi
+from kwneuro_slicer_bridge.labelmap import publish_labelmap_resource
 from kwneuro_slicer_bridge.transform import InSceneTransformResource
 from kwneuro_slicer_bridge.volume import InSceneVolumeResource
 
 __all__ = [
     "InSceneDti",
     "InSceneDwi",
+    "InSceneStructuralImage",
     "InSceneTransformResource",
     "InSceneVolumeResource",
     "ProgressDialog",
     "ensure_extras_installed",
+    "publish_labelmap_resource",
     "run_in_worker",
     "run_with_progress_dialog",
 ]
+
+
+def __getattr__(name: str):
+    if name == "InSceneStructuralImage":
+        from kwneuro_slicer_bridge.structural import InSceneStructuralImage
+
+        return InSceneStructuralImage
+    raise AttributeError(name)

@@ -4,12 +4,12 @@
 :maxdepth: 1
 
 dmri-pipeline-walkthrough
+structural-workflow
 ```
 
-A hand-written walkthrough of an end-to-end pipeline (denoise → DTI
-→ SyN registration). Each bridge `Resource` class gets exercised;
-every intermediate result lands in the scene as the appropriate
-MRML node.
+Hand-written walkthroughs of end-to-end diffusion and structural
+workflows. Each bridge `Resource` class gets exercised; every
+intermediate result lands in the scene as the appropriate MRML node.
 
 The tutorial is written as a sequence of cells you paste into
 Slicer's Python console. A runnable SlicerJupyter notebook version

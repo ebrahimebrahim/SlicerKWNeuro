@@ -36,7 +36,7 @@ Navigate to the **KWNeuro** category in the module selector and open
 - **Status.** Shows the installed `kwneuro` version (the bridge is
   bundled with the extension and reports as such), an
   **Optional extras** groupbox with one checkbox per kwneuro extra
-  (`hdbet`, `noddi`, `tractseg`, `combat`), and the
+  (`hdbet`, `noddi`, `tractseg`, `combat`, `antspynet`), and the
   **Install / Update** button. On first launch the kwneuro version
   reads *(not installed)*; click *Install / Update* and pip fetches
   it from the pinned git ref. Ticking an extras checkbox installs
@@ -82,11 +82,13 @@ Wrapping an existing scene node by name:
 svr = InSceneVolumeResource.from_scene_by_name("my_first_bridge")
 ```
 
-## 5. Dwi / Dti classes IS-A kwneuro's Dwi / Dti
+## 5. Dwi / Dti / StructuralImage classes IS-A kwneuro parents
 
-`InSceneDwi` and `InSceneDti` subclass `kwneuro.dwi.Dwi` and
-`kwneuro.dti.Dti` respectively. That means any pipeline function that
-takes a `Dwi` or `Dti` accepts the scene-backed version directly:
+`InSceneDwi`, `InSceneDti`, and `InSceneStructuralImage` subclass
+`kwneuro.dwi.Dwi`, `kwneuro.dti.Dti`, and
+`kwneuro.structural.StructuralImage` respectively. That means any
+pipeline function that takes one of those kwneuro values accepts the
+scene-backed version directly:
 
 ```python
 from kwneuro_slicer_bridge import InSceneDwi
@@ -107,6 +109,15 @@ dti      = sdwi.estimate_dti()     # inherited
 ```
 
 No explicit conversion step needed.
+
+Structural images follow the same pattern:
+
+```python
+from kwneuro_slicer_bridge import InSceneStructuralImage
+
+st1 = InSceneStructuralImage.from_nifti_path("sub-01_T1w.nii.gz", name="T1w")
+corrected = st1.correct_bias()
+```
 
 See {doc}`bridge-reference` for the rest of the bridge API and
 {doc}`Tutorials <tutorials/index>` for a fuller pipeline walkthrough.

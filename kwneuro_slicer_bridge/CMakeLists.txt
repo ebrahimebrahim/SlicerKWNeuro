@@ -8,6 +8,8 @@ set(MODULE_PYTHON_SCRIPTS
   kwneuro_slicer_bridge/conversions.py
   kwneuro_slicer_bridge/dti.py
   kwneuro_slicer_bridge/dwi.py
+  kwneuro_slicer_bridge/labelmap.py
+  kwneuro_slicer_bridge/structural.py
   kwneuro_slicer_bridge/transform.py
   kwneuro_slicer_bridge/volume.py
   )
