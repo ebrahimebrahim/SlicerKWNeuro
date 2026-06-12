@@ -59,7 +59,8 @@ automatically.
 
 Consequence: there's no pip install of the bridge anywhere.
 `KWNeuroEnvironment.ensure_kwneuro_installed` only handles the
-external `kwneuro` library now (pip-installed from its git ref).
+external `kwneuro` library now (pip-installed from its pinned PyPI
+release).
 Scripted modules import with `from kwneuro_slicer_bridge import ...`,
 the Python interactor and SlicerJupyter notebooks do the same.
 

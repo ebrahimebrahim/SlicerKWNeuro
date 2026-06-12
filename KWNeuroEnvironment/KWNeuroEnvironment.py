@@ -12,8 +12,7 @@ Design notes:
   so no install step is needed for the bridge — it's importable from the
   moment Slicer loads the extension. The Install / Update button only
   needs to ensure `kwneuro` itself is on Slicer's Python path.
-* `kwneuro` is installed straight from its main branch on GitHub. If a
-  PyPI release becomes available, swap the spec.
+* `kwneuro` is installed from a pinned PyPI release.
 * Each optional extra is installed separately via `slicer.packaging.pip_install`,
   hard-coded with the package spec kwneuro's own pyproject.toml declares
   for that extra. TractSeg uses `skip_packages=["fury"]` to preserve
@@ -41,10 +40,9 @@ from slicer.ScriptedLoadableModule import (
 )
 
 
-# Pip spec used by the Install / Update button. Tracks kwneuro main
-# directly; cut over to a tagged release once kwneuro starts publishing
-# them again.
-KWNEURO_PIP_SPEC = "kwneuro @ git+https://github.com/KitwareMedical/kwneuro@main"
+# Pip spec used by the Install / Update button.
+KWNEURO_PINNED_VERSION = "1.0.0"
+KWNEURO_PIP_SPEC = f"kwneuro=={KWNEURO_PINNED_VERSION}"
 
 
 # Per-extra install specifications. Each "packages" list is the concrete
@@ -150,10 +148,8 @@ class KWNeuroEnvironmentLogic(ScriptedLoadableModuleLogic):
     ) -> None:
         """Pip-install (or upgrade) the kwneuro library into Slicer's Python.
 
-        ``KWNEURO_PIP_SPEC`` pins the install source — currently the
-        ``main`` branch of the upstream kwneuro repo. Re-clicking
-        Install / Update after kwneuro main moves picks up the latest
-        commit.
+        ``KWNEURO_PIP_SPEC`` pins the install source to the kwneuro
+        release this extension targets.
         """
         import slicer.packaging
 

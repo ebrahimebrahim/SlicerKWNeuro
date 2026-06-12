@@ -39,7 +39,7 @@ Navigate to the **KWNeuro** category in the module selector and open
   (`hdbet`, `noddi`, `tractseg`, `combat`, `antspynet`), and the
   **Install / Update** button. On first launch the kwneuro version
   reads *(not installed)*; click *Install / Update* and pip fetches
-  it from the pinned git ref. Ticking an extras checkbox installs
+  the pinned `kwneuro==1.0.0` release. Ticking an extras checkbox installs
   that extra; unticking uninstalls it. TractSeg is the only one that
   needs special handling (`fury` is pruned to preserve Slicer's
   bundled VTK); the panel does that for you automatically.

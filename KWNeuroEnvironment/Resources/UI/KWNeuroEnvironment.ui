@@ -105,7 +105,7 @@
          <string>Install / Update kwneuro</string>
         </property>
         <property name="toolTip">
-         <string>pip-installs (or upgrades) the kwneuro library from its pinned git ref into Slicer's bundled Python. The kwneuro_slicer_bridge package is shipped with this extension and needs no install — it is reachable from any Slicer session that has the extension loaded.</string>
+         <string>pip-installs the pinned kwneuro==1.0.0 release into Slicer's bundled Python. The kwneuro_slicer_bridge package is shipped with this extension and needs no install — it is reachable from any Slicer session that has the extension loaded.</string>
         </property>
        </widget>
       </item>

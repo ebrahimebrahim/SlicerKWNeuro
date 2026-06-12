@@ -153,8 +153,8 @@ build-tree's module paths — the KWNeuro modules appear under
 ### 3. Install `kwneuro` + any extras
 
 Open **KWNeuro Environment** and click **Install / Update**. That
-pip-installs the `kwneuro` library from its pinned git ref into
-Slicer's Python. Then tick any optional-extra checkboxes you want
+pip-installs the pinned `kwneuro==1.0.0` release into Slicer's
+Python. Then tick any optional-extra checkboxes you want
 (`hdbet`, `noddi`, `tractseg`, `combat`, `antspynet`); the panel drives
 `slicer.packaging.pip_install` for each, including the
 `skip_packages=["fury"]` dance TractSeg needs.

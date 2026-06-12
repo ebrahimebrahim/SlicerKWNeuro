@@ -19,6 +19,9 @@ class TestKWNeuroEnvironmentSmoke(unittest.TestCase):
     def test_logic_methods_do_not_raise(self) -> None:
         import KWNeuroEnvironment
 
+        self.assertEqual(KWNeuroEnvironment.KWNEURO_PINNED_VERSION, "1.0.0")
+        self.assertEqual(KWNeuroEnvironment.KWNEURO_PIP_SPEC, "kwneuro==1.0.0")
+
         logic = KWNeuroEnvironment.KWNeuroEnvironmentLogic()
         kwneuro_ver = logic.installed_kwneuro_version()
         self.assertTrue(kwneuro_ver is None or isinstance(kwneuro_ver, str))
