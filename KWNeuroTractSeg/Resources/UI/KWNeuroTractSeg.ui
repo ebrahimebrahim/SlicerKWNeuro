@@ -66,7 +66,7 @@
    <item>
     <widget class="QPushButton" name="applyButton">
      <property name="text"><string>Apply</string></property>
-     <property name="toolTip"><string>Run TractSeg. Requires kwneuro[tractseg] and a CUDA GPU for reasonable runtime (CPU fallback works but is very slow). Output: 4D vector volume whose last dim has 72 (tract_seg), 144 (endings), or 60 (TOM) components.</string></property>
+     <property name="toolTip"><string>Run TractSeg. Requires kwneuro[tractseg] and a CUDA GPU for reasonable runtime (CPU fallback works but is very slow). tract_segmentation creates a segmentation node with 72 bundle segments; endings_segmentation creates one with 144 endpoint segments; TOM creates a 60-component vector volume.</string></property>
      <property name="enabled"><bool>false</bool></property>
     </widget>
    </item>

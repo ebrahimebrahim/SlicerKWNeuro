@@ -19,7 +19,7 @@ Design notes:
   for that extra. TractSeg uses `skip_packages=["fury"]` to preserve
   Slicer's bundled VTK — installing fury would drag in a second,
   incompatible VTK alongside Slicer's and break rendering (see
-  `CLAUDE.md` for the longer write-up).
+  `AGENTS.md` for the longer write-up).
 * The Verify setup action imports kwneuro + the bridge, pushes a small
   synthetic volume into the scene via `InSceneVolumeResource`, verifies
   round-trip, and cleans up.

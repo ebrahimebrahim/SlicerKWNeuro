@@ -29,7 +29,7 @@ dialog without crashing the subject-hierarchy plugin.
 | **KWNeuroDTI** | Tensor fit + optional FA / MD; mask accepts scalar / labelmap / segmentation | — |
 | **KWNeuroCSD** | Constrained Spherical Deconvolution peaks (MRtrix3-style vector volume) | — |
 | **KWNeuroNODDI** | NODDI via AMICO (NDI / ODI / FWF, optional modulated maps) | `noddi` |
-| **KWNeuroTractSeg** | CNN-based tract segmentation (72 bundle masks, endings, or TOM) | `tractseg` |
+| **KWNeuroTractSeg** | CNN-based tract segmentation (bundle / endpoint segmentation nodes, or TOM vector volume) | `tractseg` |
 | **KWNeuroRegister** | ANTs registration (Rigid / Affine / SyN / SyNRA) with optional masks | — |
 | **KWNeuroTemplate** | Iterative unbiased group-wise template construction via ANTs | — |
 | **KWNeuroHarmonize** | Cross-site ComBat harmonisation of scalar maps (group-level) | `combat` |
@@ -63,7 +63,7 @@ dialog.
   alongside the scripted modules in the install layout).
 - `docs/` — Sphinx site.
 - `notebooks/` — SlicerJupyter-kernel walkthroughs (see below).
-- `CLAUDE.md` — working notes for contributors: architectural
+- `AGENTS.md` — working notes for contributors: architectural
   decisions, coordinate-system traps, review-driven test patterns.
 
 ## Using the modules

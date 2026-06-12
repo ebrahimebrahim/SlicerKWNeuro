@@ -64,20 +64,36 @@ release).
 Scripted modules import with `from kwneuro_slicer_bridge import ...`,
 the Python interactor and SlicerJupyter notebooks do the same.
 
-### `InSceneDwi` / `InSceneDti` subclass kwneuro's `Dwi` / `Dti`
+### Scene-backed domain classes subclass kwneuro domain classes
 
-So anything that takes a `kwneuro.Dwi` as input accepts an
-`InSceneDwi` directly — no conversion step in user code. Uses
-`@dataclass(init=False)` to subclass kwneuro's dataclasses.
+So anything that takes a `kwneuro.Dwi`, `kwneuro.Dti`, or
+`kwneuro.structural.StructuralImage` as input accepts `InSceneDwi`,
+`InSceneDti`, or `InSceneStructuralImage` directly — no conversion
+step in user code. Uses `@dataclass(init=False)` to subclass
+kwneuro's dataclasses.
+
+`InSceneTransformResource` is the exception: kwneuro transform
+resources are file-backed ANTs outputs, so the bridge is a standalone
+one-way publisher from kwneuro transforms to Slicer transform nodes.
 
 ### Async helpers don't touch Qt from the worker
 
 `run_in_worker` / `run_with_progress_dialog` run `fn` on a plain
-`threading.Thread`; completion marshals back to the main thread via
-a main-thread `qt.QTimer.singleShot` poll loop. `QTimer.singleShot`
-*must not* be called from the worker — that produces
-`Timers can only be used with threads started with QThread`
-warnings and the timer silently never fires.
+`threading.Thread`. `run_in_worker` creates no Qt objects; callers
+wait on the returned `threading.Event` and drain the progress queue
+from the main thread.
+
+`run_with_progress_dialog` creates the dialog on the main thread,
+starts the worker, then busy-polls `handle.done_event.wait(0.05)`
+while calling `slicer.app.processEvents()` and draining progress
+lines into the dialog. Keep `threading.Event.wait(...)` here rather
+than `QThread.msleep(...)` — the Python wait releases the GIL, while
+`QThread.msleep` starved CPU-heavy Python workers badly in testing.
+
+No Qt calls belong in the worker. In particular, don't revive the old
+idea of calling `qt.QTimer.singleShot` from the worker; it produces
+`Timers can only be used with threads started with QThread` warnings
+and the timer silently never fires.
 
 ### `TqdmToProgressDialog` is deliberately fragile
 
@@ -93,6 +109,18 @@ dipy for `from tqdm[...] import tqdm` and flags any unlisted
 match — forces a conscious decision when kwneuro starts routing
 through new dipy submodules.
 
+Only one `TqdmToProgressDialog` context may be active at a time.
+It mutates module-level tqdm bindings, so `_TQDM_PATCH_LOCK` raises
+rather than letting two concurrent captures clobber each other's
+restore bookkeeping.
+
+`StdStreamsToProgressDialog` is separate and deliberately
+process-wide: it tees `sys.stdout` / `sys.stderr` into the same
+progress queue for libraries that print status instead of using tqdm
+(for example TractSeg / nnunetv2). Use `capture_stdout=True` only
+around the worker phase, where the main thread is just pumping the
+dialog and not printing anything important.
+
 ### Caching is off for scene-backed resources
 
 `InSceneVolumeResource` holds a `_node` field (a live VTK object)
@@ -105,6 +133,18 @@ dropped from cache tracking with a `UserWarning`. Two consequences:
    correct invalidation.
 2. Scene-backed resources are detached via `.to_in_memory()`; the
    result is fingerprint-stable and cache-safe.
+
+### Labelmaps go through `publish_labelmap_resource`
+
+Binary masks and multi-label structural outputs should be published
+with `kwneuro_slicer_bridge.publish_labelmap_resource(...)`. It
+preserves integer label values, chooses an integer dtype for
+integer-like float arrays, attaches Slicer's Labels color table, and
+removes the partial node if display setup fails.
+
+The exception is multi-channel TractSeg mask output, which is
+published as a `vtkMRMLSegmentationNode` with one named segment per
+channel rather than as a stack of labelmap volumes.
 
 ## Coordinate systems and data layout — known traps
 
@@ -127,6 +167,19 @@ handle this — specifically `vtk_image_to_numpy` does
 `slicer.util.arrayFromSegmentBinaryLabelmap` also returns KJI — the
 segmentation-mask branch in `KWNeuroDTI._extract_mask_resource`
 transposes before wrapping.
+
+### DTI tensors are 6-component in kwneuro, 9-component in Slicer
+
+kwneuro / dipy store tensors as six lower-triangular components
+`(Dxx, Dxy, Dyy, Dxz, Dyz, Dzz)`. Slicer's
+`vtkMRMLDiffusionTensorVolumeNode` stores a full symmetric 3x3 tensor
+in `PointData.Tensors`. `InSceneDti.from_dti` expands 6 -> 9 on
+publish, and `InSceneDti.from_node` compresses 9 -> 6 on read.
+
+Consequence: `InSceneDti.volume` is an `InMemoryVolumeResource`
+snapshot built at construction time, not a live scene view. If a DTI
+node's tensor image changes, call `InSceneDti.from_node(node)` again
+to refresh.
 
 ### `xyzt_units = 2` (mm) on detached resources
 
@@ -268,12 +321,18 @@ users coming from MRtrix3 workflows. If that becomes a real user
 complaint, the UI default in `KWNeuroCSD` can be flipped to `False`
 without changing the library.
 
-### TractSeg `vtkMRMLVectorVolumeNode` output
+### TractSeg segmentation vs TOM output
 
-A 72-component `tract_segmentation` output renders as first-3-as-RGB
-via Slicer's default vector-volume display, which is arbitrary. A
-better future representation: a subject-hierarchy folder of 72
-scalar volumes, one per named bundle. Defer until someone asks.
+`tract_segmentation` now publishes a `vtkMRMLSegmentationNode` with
+72 named bundle segments; `endings_segmentation` publishes the same
+kind of node with 144 endpoint segments. Tests assert both the MRML
+class and the channel-to-name ordering, including empty segments.
+
+`TOM` remains a 60-component `vtkMRMLVectorVolumeNode` because each
+tract orientation map has xyz vector components. Slicer's default
+vector-volume display is still not a meaningful TOM visualisation; if
+that becomes a user-facing need, add a TOM-specific representation
+rather than treating it as an RGB volume.
 
 ### Cancellation for heavy modules
 
