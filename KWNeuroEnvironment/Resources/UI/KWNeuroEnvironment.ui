@@ -64,7 +64,7 @@
          <item>
           <widget class="QCheckBox" name="extra_hdbet_CheckBox">
            <property name="text">
-            <string>hdbet — HD-BET brain extraction (adds torch, nnunetv2; several GB)</string>
+            <string>hdbet — HD-BET brain extraction (PyTorch via PyTorchUtils; adds nnunetv2)</string>
            </property>
           </widget>
          </item>
@@ -78,7 +78,7 @@
          <item>
           <widget class="QCheckBox" name="extra_tractseg_CheckBox">
            <property name="text">
-            <string>tractseg — white-matter tract segmentation (fury pruned to preserve Slicer VTK)</string>
+            <string>tractseg — white-matter tract segmentation (PyTorch via PyTorchUtils; fury pruned)</string>
            </property>
           </widget>
          </item>

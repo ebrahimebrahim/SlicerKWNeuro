@@ -16,10 +16,13 @@ Design notes:
 * `kwneuro` is installed from a pinned PyPI release.
 * Each optional extra is installed separately via `slicer.packaging.pip_install`,
   hard-coded with the package spec kwneuro's own pyproject.toml declares
-  for that extra. TractSeg uses `skip_packages=["fury"]` to preserve
-  Slicer's bundled VTK — installing fury would drag in a second,
-  incompatible VTK alongside Slicer's and break rendering (see
-  `AGENTS.md` for the longer write-up).
+  for that extra. HD-BET and TractSeg are PyTorch consumers, so their
+  install path delegates PyTorch wheel selection to Slicer's PyTorchUtils
+  / light-the-torch integration and then skips PyTorch packages during the
+  extra install so pip cannot replace the compatible wheel. TractSeg also
+  uses `skip_packages=["fury"]` to preserve Slicer's bundled VTK —
+  installing fury would drag in a second, incompatible VTK alongside
+  Slicer's and break rendering (see `AGENTS.md` for the longer write-up).
 * The Verify setup action imports kwneuro + the bridge, pushes a small
   synthetic volume into the scene via `InSceneVolumeResource`, verifies
   round-trip, and cleans up.
@@ -49,38 +52,46 @@ KWNEURO_PIP_SPEC = f"kwneuro=={KWNEURO_PINNED_VERSION}"
 # Per-extra install specifications. Each "packages" list is the concrete
 # PyPI (or PyPI-style) requirement(s) that mirror the corresponding
 # optional dependency group in kwneuro's pyproject.toml. "skip_packages"
-# is used only for tractseg to prune fury from the resolution so Slicer's
-# bundled VTK is preserved.
+# is used for known conflicts: preserving PyTorchUtils-selected PyTorch
+# wheels, and pruning fury from TractSeg so Slicer's bundled VTK is preserved.
+PYTORCH_SKIP_PACKAGES = ["torch", "torchvision", "torchaudio"]
+PYTORCH_EXTRA_NAMES = {"hdbet", "tractseg"}
+
 EXTRAS_INSTALL_SPEC: dict[str, dict[str, object]] = {
     "hdbet": {
         "packages": ["hd-bet == 2.0.1"],
-        "skip_packages": None,
+        "skip_packages": PYTORCH_SKIP_PACKAGES,
         "import_probe": "HD_BET",
         "display_name": "HD-BET brain extraction",
+        "requires_pytorch": True,
     },
     "noddi": {
         "packages": ["dmri-amico == 2.1.1", "backports.tarfile"],
         "skip_packages": None,
         "import_probe": "amico",
         "display_name": "NODDI via AMICO",
+        "requires_pytorch": False,
     },
     "tractseg": {
         "packages": ["TractSeg"],
-        "skip_packages": ["fury"],
+        "skip_packages": ["fury", *PYTORCH_SKIP_PACKAGES],
         "import_probe": "tractseg",
         "display_name": "TractSeg white-matter tract segmentation",
+        "requires_pytorch": True,
     },
     "combat": {
         "packages": ["neuroCombat == 0.2.12"],
         "skip_packages": None,
         "import_probe": "neuroCombat",
         "display_name": "ComBat harmonisation",
+        "requires_pytorch": False,
     },
     "antspynet": {
         "packages": ["antspynet"],
         "skip_packages": None,
         "import_probe": "antspynet",
         "display_name": "ANTsPyNet structural segmentation / parcellation",
+        "requires_pytorch": False,
     },
 }
 
@@ -165,6 +176,79 @@ class KWNeuroEnvironmentLogic(ScriptedLoadableModuleLogic):
         )
 
     @staticmethod
+    def _installed_pytorch_backend() -> str | None:
+        """Return installed PyTorch backend tag, or None if PyTorch is absent."""
+        try:
+            import torch
+        except ModuleNotFoundError:
+            return None
+        except Exception as exc:  # noqa: BLE001
+            logging.warning("Installed PyTorch cannot be imported: %s", exc)
+            return "broken"
+
+        cuda_version = getattr(torch.version, "cuda", None)
+        if cuda_version:
+            parts = cuda_version.split(".")
+            if len(parts) >= 2:
+                return f"cu{int(parts[0])}{int(parts[1])}"
+            return f"cu{cuda_version.replace('.', '')}"
+
+        hip_version = getattr(torch.version, "hip", None)
+        if hip_version:
+            parts = hip_version.split(".")
+            if len(parts) >= 2:
+                return f"rocm{int(parts[0])}.{int(parts[1])}"
+            return f"rocm{hip_version}"
+
+        return "cpu"
+
+    @staticmethod
+    def _pytorch_utils_logic():
+        try:
+            import PyTorchUtils
+        except ModuleNotFoundError as exc:
+            msg = (
+                "Installing the hdbet or tractseg extra requires Slicer's "
+                "PyTorch extension so PyTorch can be installed through "
+                "PyTorchUtils / light-the-torch. Install the PyTorch extension "
+                "from the Slicer Extension Manager, restart Slicer, then apply "
+                "KWNeuro environment changes again."
+            )
+            raise RuntimeError(msg) from exc
+        return PyTorchUtils.PyTorchUtilsLogic()
+
+    @staticmethod
+    def ensure_compatible_pytorch_installed() -> None:
+        """Install or repair PyTorch using Slicer's PyTorchUtils/ltt path."""
+        installed_backend = KWNeuroEnvironmentLogic._installed_pytorch_backend()
+        if installed_backend == "cpu":
+            return
+
+        torch_logic = KWNeuroEnvironmentLogic._pytorch_utils_logic()
+
+        if installed_backend not in (None, "broken"):
+            compatible_backends = {
+                str(backend)
+                for backend in torch_logic.getCompatibleComputationBackends()
+            }
+            if installed_backend in compatible_backends:
+                return
+            logging.warning(
+                "Installed PyTorch backend %s is not compatible with detected "
+                "hardware backends %s; reinstalling via PyTorchUtils.",
+                installed_backend,
+                sorted(compatible_backends),
+            )
+            torch_logic.uninstallTorch()
+        elif installed_backend == "broken":
+            torch_logic.uninstallTorch()
+
+        torch = torch_logic.installTorch(askConfirmation=True)
+        if torch is None:
+            msg = "PyTorch installation was cancelled or did not complete."
+            raise RuntimeError(msg)
+
+    @staticmethod
     def install_extra(name: str) -> None:
         """Install the named extra via slicer.packaging, preserving VTK for tractseg."""
         import slicer.packaging
@@ -174,6 +258,8 @@ class KWNeuroEnvironmentLogic(ScriptedLoadableModuleLogic):
             raise ValueError(msg)
         spec = EXTRAS_INSTALL_SPEC[name]
         logging.info("Installing kwneuro extra %r: %s", name, spec["packages"])
+        if spec.get("requires_pytorch", False):
+            KWNeuroEnvironmentLogic.ensure_compatible_pytorch_installed()
         slicer.packaging.pip_install(
             spec["packages"],  # type: ignore[arg-type]
             skip_packages=spec["skip_packages"],  # type: ignore[arg-type]
@@ -300,6 +386,15 @@ class KWNeuroEnvironmentWidget(ScriptedLoadableModuleWidget):
                 desired_status = self._current_desired_extras_status()
                 self.logic.ensure_kwneuro_installed()
                 installed_status = self.logic.extras_status()
+
+                for name in EXTRAS_INSTALL_SPEC:
+                    spec = EXTRAS_INSTALL_SPEC[name]
+                    if (
+                        desired_status[name]
+                        and installed_status.get(name, False)
+                        and spec.get("requires_pytorch", False)
+                    ):
+                        self.logic.ensure_compatible_pytorch_installed()
 
                 for name in EXTRAS_INSTALL_SPEC:
                     if desired_status[name] and not installed_status.get(name, False):

@@ -41,9 +41,12 @@ Navigate to the **KWNeuro** category in the module selector and open
   version reads *(not installed)*; choose the extras you want and click
   *Apply environment changes*. The panel pip fetches the pinned
   `kwneuro` release, installs checked extras, and uninstalls unchecked
-  extras that are currently present. TractSeg is the only one that
-  needs special handling (`fury` is pruned to preserve Slicer's bundled
-  VTK); the panel does that for you automatically.
+  extras that are currently present. HD-BET and TractSeg use Slicer's
+  PyTorchUtils / light-the-torch path for PyTorch so pip does not pick
+  a CUDA wheel that is incompatible with the local NVIDIA driver. The
+  panel also prunes PyTorch packages from those extra installs so pip
+  cannot replace the compatible wheel. TractSeg still prunes `fury` to
+  preserve Slicer's bundled VTK.
 
 - **Verification.** Click **Verify setup**. The button's tooltip
   describes what gets checked (imports + a synthetic round-trip).

@@ -159,8 +159,11 @@ want (`hdbet`, `noddi`, `tractseg`, `combat`, `antspynet`), then click
 **Apply environment changes**. That pip-installs the pinned
 `kwneuro` release into Slicer's Python and applies the selected extra
 state; the panel drives `slicer.packaging.pip_install` for each newly
-checked extra, including the `skip_packages=["fury"]` dance TractSeg
-needs.
+checked extra. HD-BET and TractSeg install PyTorch through Slicer's
+PyTorchUtils / light-the-torch path first, then prune PyTorch packages
+from the extra dependency walk so pip cannot replace the compatible
+wheel. TractSeg also keeps the `skip_packages=["fury"]` handling it
+needs to preserve Slicer's bundled VTK.
 
 The `kwneuro_slicer_bridge` package ships bundled with the extension
 (in the same `qt-scripted-modules/` directory as the modules), so

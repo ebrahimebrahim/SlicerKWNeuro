@@ -9,7 +9,7 @@ set(EXTENSION_CONTRIBUTORS "Ebrahim Ebrahim (Kitware, Inc.)")
 set(EXTENSION_DESCRIPTION "Bring the kwneuro neuroimage processing toolkit into 3D Slicer as scriptable bridge classes and click-through GUI modules for structural and diffusion workflows.")
 set(EXTENSION_ICONURL "https://raw.githubusercontent.com/brain-microstructure-exploration-tools/KWNeuro/main/KWNeuro.png")
 set(EXTENSION_SCREENSHOTURLS "https://raw.githubusercontent.com/brain-microstructure-exploration-tools/KWNeuro/main/KWNeuro.png")
-set(EXTENSION_DEPENDS "NA") # Specified as a list or "NA" if no dependencies
+set(EXTENSION_DEPENDS "PyTorch") # Specified as a list or "NA" if no dependencies
 
 #-----------------------------------------------------------------------------
 # Extension dependencies

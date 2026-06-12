@@ -8,6 +8,7 @@ Python via the env panel's Apply environment changes button. The
 from __future__ import annotations
 
 import unittest
+from unittest import mock
 
 
 def _extras_status(**overrides: bool) -> dict[str, bool]:
@@ -33,6 +34,9 @@ class _FakeEnvironmentLogic:
 
     def ensure_kwneuro_installed(self) -> None:
         self.calls.append(("ensure", None))
+
+    def ensure_compatible_pytorch_installed(self) -> None:
+        self.calls.append(("pytorch", None))
 
     def install_extra(self, name: str) -> None:
         self.calls.append(("install", name))
@@ -64,6 +68,137 @@ class TestKWNeuroEnvironmentSmoke(unittest.TestCase):
         self.assertEqual(set(status), set(KWNeuroEnvironment.EXTRAS_INSTALL_SPEC))
         for name, value in status.items():
             self.assertIsInstance(value, bool, f"extras_status[{name!r}] must be bool")
+
+    def test_pytorch_extra_specs_are_explicit(self) -> None:
+        """Torch-consuming extras must use the PyTorch-preserving install path."""
+        import KWNeuroEnvironment
+
+        torch_extras = {
+            name
+            for name, spec in KWNeuroEnvironment.EXTRAS_INSTALL_SPEC.items()
+            if spec.get("requires_pytorch", False)
+        }
+        self.assertEqual(torch_extras, KWNeuroEnvironment.PYTORCH_EXTRA_NAMES)
+
+        for name in KWNeuroEnvironment.PYTORCH_EXTRA_NAMES:
+            skip_packages = KWNeuroEnvironment.EXTRAS_INSTALL_SPEC[name]["skip_packages"]
+            for package in KWNeuroEnvironment.PYTORCH_SKIP_PACKAGES:
+                self.assertIn(package, skip_packages)
+
+        self.assertIn(
+            "fury",
+            KWNeuroEnvironment.EXTRAS_INSTALL_SPEC["tractseg"]["skip_packages"],
+        )
+
+    def test_install_extra_preserves_pytorch_for_torch_consuming_extras(self) -> None:
+        """hdbet and tractseg should install PyTorch first and skip PyTorch deps."""
+        import sys
+        import types
+
+        import slicer
+
+        import KWNeuroEnvironment
+
+        calls: list[tuple[str, object, object, object]] = []
+
+        def fake_pip_install(packages, skip_packages=None, requester=None) -> None:
+            calls.append(("pip", list(packages), skip_packages, requester))
+
+        def fake_ensure_pytorch() -> None:
+            calls.append(("torch", None, None, None))
+
+        fake_packaging = types.SimpleNamespace(pip_install=fake_pip_install)
+        original_packaging_attr = getattr(slicer, "packaging", None)
+        original_packaging_module = sys.modules.get("slicer.packaging")
+        original_ensure = (
+            KWNeuroEnvironment.KWNeuroEnvironmentLogic
+            .ensure_compatible_pytorch_installed
+        )
+
+        slicer.packaging = fake_packaging
+        sys.modules["slicer.packaging"] = fake_packaging
+        KWNeuroEnvironment.KWNeuroEnvironmentLogic.ensure_compatible_pytorch_installed = (
+            staticmethod(fake_ensure_pytorch)
+        )
+        try:
+            KWNeuroEnvironment.KWNeuroEnvironmentLogic.install_extra("hdbet")
+            self.assertEqual(calls[0], ("torch", None, None, None))
+            self.assertEqual(calls[1][0], "pip")
+            self.assertEqual(calls[1][1], ["hd-bet == 2.0.1"])
+            self.assertEqual(
+                calls[1][2],
+                KWNeuroEnvironment.PYTORCH_SKIP_PACKAGES,
+            )
+
+            calls.clear()
+            KWNeuroEnvironment.KWNeuroEnvironmentLogic.install_extra("tractseg")
+            self.assertEqual(calls[0], ("torch", None, None, None))
+            self.assertEqual(calls[1][1], ["TractSeg"])
+            self.assertIn("fury", calls[1][2])
+            for package in KWNeuroEnvironment.PYTORCH_SKIP_PACKAGES:
+                self.assertIn(package, calls[1][2])
+
+            calls.clear()
+            KWNeuroEnvironment.KWNeuroEnvironmentLogic.install_extra("noddi")
+            self.assertEqual(calls[0][0], "pip")
+            self.assertIsNone(calls[0][2])
+        finally:
+            KWNeuroEnvironment.KWNeuroEnvironmentLogic.ensure_compatible_pytorch_installed = (
+                staticmethod(original_ensure)
+            )
+            if original_packaging_attr is None:
+                delattr(slicer, "packaging")
+            else:
+                slicer.packaging = original_packaging_attr
+            if original_packaging_module is None:
+                sys.modules.pop("slicer.packaging", None)
+            else:
+                sys.modules["slicer.packaging"] = original_packaging_module
+
+    def test_incompatible_cuda_pytorch_is_reinstalled_through_pytorchutils(self) -> None:
+        """A CUDA wheel outside ltt's compatible backend set must be replaced."""
+        import sys
+        import types
+
+        import KWNeuroEnvironment
+
+        calls: list[object] = []
+
+        class _FakePyTorchUtilsLogic:
+            @staticmethod
+            def getCompatibleComputationBackends():
+                calls.append("compatible")
+                return ["cpu", "cu129"]
+
+            def uninstallTorch(self):
+                calls.append("uninstall")
+
+            def installTorch(self, askConfirmation=False):
+                calls.append(("install", askConfirmation))
+                return object()
+
+        fake_pytorch_utils = types.SimpleNamespace(
+            PyTorchUtilsLogic=_FakePyTorchUtilsLogic,
+        )
+        original_pytorch_utils = sys.modules.get("PyTorchUtils")
+        sys.modules["PyTorchUtils"] = fake_pytorch_utils
+        try:
+            with mock.patch.object(
+                KWNeuroEnvironment.KWNeuroEnvironmentLogic,
+                "_installed_pytorch_backend",
+                staticmethod(lambda: "cu130"),
+            ):
+                (
+                    KWNeuroEnvironment.KWNeuroEnvironmentLogic
+                    .ensure_compatible_pytorch_installed()
+                )
+        finally:
+            if original_pytorch_utils is None:
+                sys.modules.pop("PyTorchUtils", None)
+            else:
+                sys.modules["PyTorchUtils"] = original_pytorch_utils
+
+        self.assertEqual(calls, ["compatible", "uninstall", ("install", True)])
 
     def test_verify_setup_passes_when_kwneuro_installed(self) -> None:
         """If kwneuro is installed, verify_setup should pass.
@@ -149,6 +284,27 @@ class TestKWNeuroEnvironmentWidget(unittest.TestCase):
         )
         self.assertTrue(widget.ui.extra_hdbet_CheckBox.checked)
         self.assertFalse(widget.ui.extra_combat_CheckBox.checked)
+
+    def test_apply_repairs_pytorch_for_installed_torch_extra(self) -> None:
+        widget = self._widget()
+        fake_logic = _FakeEnvironmentLogic(_extras_status(hdbet=True))
+        widget.logic = fake_logic
+        widget.refresh()
+        fake_logic.calls.clear()
+
+        widget.ui.installKwneuroButton.click()
+        self._pump()
+
+        self.assertEqual(
+            fake_logic.calls,
+            [
+                ("ensure", None),
+                ("status", None),
+                ("pytorch", None),
+                ("version", None),
+                ("status", None),
+            ],
+        )
 
     def test_refresh_discards_pending_checkbox_edits(self) -> None:
         widget = self._widget()

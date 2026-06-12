@@ -293,7 +293,7 @@ Five kwneuro optional extras managed by `KWNeuroEnvironment`:
 |---|---|---|
 | `hdbet` | `hd-bet == 2.0.1` | Heavy (torch + nnunetv2 + batchgenerators, several GB). Strongly wants CUDA. |
 | `noddi` | `dmri-amico == 2.1.1`, `backports.tarfile` | AMICO writes kernel caches to disk; kwneuro redirects to a tmpdir via `set_config("ATOMS_path", tmpdir)`. |
-| `tractseg` | `TractSeg` | **MUST pass `skip_packages=["fury"]`** to `slicer.packaging.pip_install` — `fury` drags in `vtk<9.4` which would clobber Slicer's bundled VTK 9.6+ and break rendering. |
+| `tractseg` | `TractSeg` | **MUST include `"fury"` in `skip_packages`** when calling `slicer.packaging.pip_install` — `fury` drags in `vtk<9.4` which would clobber Slicer's bundled VTK 9.6+ and break rendering. |
 | `combat` | `neuroCombat == 0.2.12` | Pinned because `neuroCombat` is dormant; we want Dependabot to flag any new release. |
 | `antspynet` | `antspynet` | Needed for Deep Atropos tissue segmentation and DKT parcellation. |
 
@@ -305,6 +305,16 @@ its input through `packaging.requirements.Requirement`, which does
 `kwneuro[tractseg]`. Pass `["TractSeg"]` (the bare PyPI package
 name) instead. `KWNeuroEnvironment.install_extra` already handles
 this — don't duplicate.
+
+### PyTorch extras use PyTorchUtils first
+
+`hdbet` declares `torch` and can otherwise pull a latest PyPI CUDA
+wheel that is too new for the user's NVIDIA driver. `tractseg` also
+uses torch at runtime. `KWNeuroEnvironment.install_extra` calls
+Slicer's PyTorchUtils / light-the-torch path before installing either
+extra, then passes `skip_packages=["torch", "torchvision", "torchaudio"]`
+(plus `fury` for TractSeg) so the extra dependency walk cannot replace
+the compatible PyTorch wheel.
 
 ## Known design questions / follow-ups
 
