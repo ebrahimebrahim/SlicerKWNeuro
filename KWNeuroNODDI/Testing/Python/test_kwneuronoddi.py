@@ -216,6 +216,92 @@ class TestKWNeuroNODDILogic(unittest.TestCase):
         ).get_array()
         np.testing.assert_allclose(scene_ndi, 0.6)
 
+    def test_run_noddi_treats_low_b_values_as_b0_for_amico(self) -> None:
+        """AMICO requires exact b=0 even when datasets encode b0 as b=5."""
+        import kwneuro.noddi as noddi_mod
+
+        from kwneuro.dwi import Dwi
+        from kwneuro.resource import InMemoryBvalResource, InMemoryBvecResource
+        from KWNeuroNODDI import KWNeuroNODDILogic
+
+        dwi = _synthetic_dwi()
+        bvals = dwi.bval.get().copy()
+        bvecs = dwi.bvec.get().copy()
+        bvals[0] = 5.0
+        bvecs[0] = [1.0, 0.0, 0.0]
+        dwi_with_low_b0 = Dwi(
+            volume=dwi.volume,
+            bval=InMemoryBvalResource(bvals),
+            bvec=InMemoryBvecResource(bvecs),
+        )
+        observed_bvals = []
+
+        def fake_estimate(adjusted_dwi, mask=None, dpar=1.7e-3, n_kernel_dirs=500):
+            observed_bvals.append(adjusted_dwi.bval.get().copy())
+            return _fake_noddi_maps()
+
+        original = noddi_mod.Noddi.estimate_noddi
+        noddi_mod.Noddi.estimate_noddi = staticmethod(fake_estimate)
+        try:
+            KWNeuroNODDILogic().run_noddi(
+                dwi=dwi_with_low_b0,
+                mask=None,
+                dpar=1.7e-3,
+                n_kernel_dirs=500,
+                create_modulated=False,
+            )
+        finally:
+            noddi_mod.Noddi.estimate_noddi = staticmethod(original)
+
+        self.assertEqual(len(observed_bvals), 1)
+        self.assertEqual(observed_bvals[0][0], 0.0)
+
+    def test_run_noddi_rejects_dwi_without_b0(self) -> None:
+        from kwneuro.dwi import Dwi
+        from kwneuro.resource import InMemoryBvalResource, InMemoryBvecResource
+        from KWNeuroNODDI import KWNeuroNODDILogic
+
+        dwi = _synthetic_dwi()
+        bvals = dwi.bval.get().copy()
+        bvecs = dwi.bvec.get().copy()
+        bvals[0] = 100.0
+        bvecs[0] = [1.0, 0.0, 0.0]
+        no_b0_dwi = Dwi(
+            volume=dwi.volume,
+            bval=InMemoryBvalResource(bvals),
+            bvec=InMemoryBvecResource(bvecs),
+        )
+
+        with self.assertRaisesRegex(ValueError, "requires at least one b0"):
+            KWNeuroNODDILogic().run_noddi(
+                dwi=no_b0_dwi,
+                mask=None,
+                dpar=1.7e-3,
+                n_kernel_dirs=500,
+                create_modulated=False,
+            )
+
+    def test_run_noddi_converts_amico_system_exit_to_runtime_error(self) -> None:
+        import kwneuro.noddi as noddi_mod
+
+        from KWNeuroNODDI import KWNeuroNODDILogic
+
+        original = noddi_mod.Noddi.estimate_noddi
+        noddi_mod.Noddi.estimate_noddi = staticmethod(
+            lambda *args, **kwargs: (_ for _ in ()).throw(SystemExit(64)),
+        )
+        try:
+            with self.assertRaisesRegex(RuntimeError, "AMICO aborted"):
+                KWNeuroNODDILogic().run_noddi(
+                    dwi=_synthetic_dwi(),
+                    mask=None,
+                    dpar=1.7e-3,
+                    n_kernel_dirs=500,
+                    create_modulated=False,
+                )
+        finally:
+            noddi_mod.Noddi.estimate_noddi = staticmethod(original)
+
     def test_run_noddi_modulated_values(self) -> None:
         """create_modulated=True publishes NDI_mod = NDI*(1-FWF), same for ODI.
 

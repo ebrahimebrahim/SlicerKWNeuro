@@ -11,6 +11,7 @@ from __future__ import annotations
 import logging
 from typing import Any
 
+import numpy as np
 import slicer
 from slicer.i18n import tr as _
 from slicer.i18n import translate
@@ -42,6 +43,8 @@ class KWNeuroNODDI(ScriptedLoadableModule):
 
 
 class KWNeuroNODDILogic(ScriptedLoadableModuleLogic):
+    AMICO_B0_THRESHOLD = 50.0
+
     def __init__(self) -> None:
         ScriptedLoadableModuleLogic.__init__(self)
 
@@ -87,9 +90,18 @@ class KWNeuroNODDILogic(ScriptedLoadableModuleLogic):
             "KWNeuroNODDI: estimating NODDI (dpar=%.4g, n_kernel_dirs=%d)",
             dpar, n_kernel_dirs,
         )
-        noddi = Noddi.estimate_noddi(
-            dwi, mask=mask, dpar=dpar, n_kernel_dirs=n_kernel_dirs,
-        )
+        dwi = self._with_amico_b0_shell(dwi)
+        try:
+            noddi = Noddi.estimate_noddi(
+                dwi, mask=mask, dpar=dpar, n_kernel_dirs=n_kernel_dirs,
+            )
+        except SystemExit as exc:
+            msg = (
+                "AMICO aborted during NODDI fitting. Check that the DWI has "
+                "a valid b0 shell, at least two diffusion-weighted shells, "
+                "and a mask that overlaps the DWI volume."
+            )
+            raise RuntimeError(msg) from exc
         result: dict[str, Any] = {
             "ndi": noddi.ndi,
             "odi": noddi.odi,
@@ -100,6 +112,44 @@ class KWNeuroNODDILogic(ScriptedLoadableModuleLogic):
             result["ndi_mod"] = ndi_mod
             result["odi_mod"] = odi_mod
         return result
+
+    def _with_amico_b0_shell(self, dwi: Any) -> Any:
+        """Return a DWI whose very-low b-values are exact zero for AMICO.
+
+        Some real-world datasets encode b0 acquisitions as small
+        non-zero values, e.g. b=5. DIPY handles those as b0 with its
+        default threshold, but AMICO's FSL-scheme path requires an exact
+        zero unless its lower-level loader is called differently. Normalize
+        the b-values before calling kwneuro/AMICO so the bundled sample data
+        and similar acquisitions do not abort with ``SystemExit``.
+        """
+        from kwneuro.dwi import Dwi
+        from kwneuro.resource import InMemoryBvalResource
+
+        loaded = dwi.load()
+        bvals = np.asarray(loaded.bval.get(), dtype=np.float64)
+        b0_mask = np.abs(bvals) <= self.AMICO_B0_THRESHOLD
+        if not np.any(b0_mask):
+            msg = (
+                "NODDI fitting requires at least one b0 volume. No b-values "
+                f"were within {self.AMICO_B0_THRESHOLD:g} s/mm^2 of zero."
+            )
+            raise ValueError(msg)
+        if np.all(bvals[b0_mask] == 0):
+            return loaded
+
+        adjusted_bvals = bvals.copy()
+        adjusted_bvals[b0_mask] = 0.0
+        logging.info(
+            "KWNeuroNODDI: treating %d low-b volumes (max b=%.4g) as b0 for AMICO",
+            int(np.count_nonzero(b0_mask)),
+            float(np.max(np.abs(bvals[b0_mask]))),
+        )
+        return Dwi(
+            volume=loaded.volume,
+            bval=InMemoryBvalResource(adjusted_bvals),
+            bvec=loaded.bvec,
+        )
 
     def publish_to_scene(
         self, volumes: dict[str, Any], base_name: str,
