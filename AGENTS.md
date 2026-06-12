@@ -1,4 +1,4 @@
-# CLAUDE.md
+# AGENTS.md
 
 Working notes for anyone (human or AI) maintaining this 3D Slicer
 extension. Consolidates the architectural decisions, coordinate-system
@@ -297,7 +297,7 @@ nearly as slow on CPU and probably deserves the same treatment.
 ```
 slicer-extn/
 ├── CMakeLists.txt                  # extension metadata, add_subdirectory() calls
-├── CLAUDE.md                       # this file
+├── AGENTS.md                       # this file
 ├── README.md                       # user-facing docs
 ├── KWNeuroEnvironment/             # install-status panel + bridge tests
 ├── KWNeuroImporter/                # DWI loader + Sherbrooke fetch
