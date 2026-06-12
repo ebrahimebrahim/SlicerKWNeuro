@@ -15,8 +15,8 @@ version of the same workflow lives at
 
 - The KWNeuro extension is on Slicer's additional module paths (see
   {doc}`../getting-started`).
-- The `KWNeuroEnvironment` module's **Install / Update** button has
-  been run; **Verify setup** passes.
+- The `KWNeuroEnvironment` module's **Apply environment changes**
+  button has been run; **Verify setup** passes.
 - The Sherbrooke 3-shell sample is cached at
   `~/.dipy/sherbrooke_3shell/`. If not, run once from a terminal:
   ```sh

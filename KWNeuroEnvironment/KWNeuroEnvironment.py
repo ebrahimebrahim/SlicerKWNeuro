@@ -10,8 +10,9 @@ Design notes:
 * The `kwneuro_slicer_bridge` package ships *bundled with this extension*
   (it sits in the same `qt-scripted-modules/` directory as the modules),
   so no install step is needed for the bridge — it's importable from the
-  moment Slicer loads the extension. The Install / Update button only
-  needs to ensure `kwneuro` itself is on Slicer's Python path.
+  moment Slicer loads the extension. The Apply environment changes button
+  ensures `kwneuro` itself is on Slicer's Python path and applies the
+  desired optional-extra state from the checkboxes.
 * `kwneuro` is installed from a pinned PyPI release.
 * Each optional extra is installed separately via `slicer.packaging.pip_install`,
   hard-coded with the package spec kwneuro's own pyproject.toml declares
@@ -40,7 +41,7 @@ from slicer.ScriptedLoadableModule import (
 )
 
 
-# Pip spec used by the Install / Update button.
+# Pip spec used by the Apply environment changes button.
 KWNEURO_PINNED_VERSION = "1.0.0"
 KWNEURO_PIP_SPEC = f"kwneuro=={KWNEURO_PINNED_VERSION}"
 
@@ -205,8 +206,8 @@ class KWNeuroEnvironmentLogic(ScriptedLoadableModuleLogic):
         qt-scripted-modules/ path is wired up), a synthetic 3D volume
         survives a round-trip through `InSceneVolumeResource`. A failure
         here means the environment is not ready for the rest of the
-        KWNeuro extension to work; re-run Install / Update for the
-        kwneuro half, or consult the error message.
+        KWNeuro extension to work; click Apply environment changes for
+        the kwneuro half, or consult the error message.
         """
         try:
             import numpy as np
@@ -255,9 +256,11 @@ class KWNeuroEnvironmentWidget(ScriptedLoadableModuleWidget):
         uiWidget.setMRMLScene(slicer.mrmlScene)
 
         self.logic = KWNeuroEnvironmentLogic()
+        self._installed_extras_status: dict[str, bool] = {}
+        self._desired_extras_status: dict[str, bool] = {}
 
         self.ui.installKwneuroButton.connect(
-            "clicked(bool)", self.onInstallKwneuroClicked,
+            "clicked(bool)", self.onApplyEnvironmentChangesClicked,
         )
         self.ui.verifySetupButton.connect("clicked(bool)", self.onVerifySetupClicked)
 
@@ -268,7 +271,7 @@ class KWNeuroEnvironmentWidget(ScriptedLoadableModuleWidget):
                 continue
             checkbox.connect(
                 "toggled(bool)",
-                lambda checked, n=name: self._onExtraToggled(n, checked),
+                lambda checked, n=name: self._onExtraDesiredStateChanged(n, checked),
             )
 
         self.refresh()
@@ -279,6 +282,8 @@ class KWNeuroEnvironmentWidget(ScriptedLoadableModuleWidget):
         self.ui.kwneuroVersionLabel.text = kwneuro_ver or "(not installed)"
 
         status = self.logic.extras_status()
+        self._installed_extras_status = dict(status)
+        self._desired_extras_status = dict(status)
         for name, installed in status.items():
             checkbox = getattr(self.ui, f"extra_{name}_CheckBox", None)
             if checkbox is None:
@@ -287,12 +292,28 @@ class KWNeuroEnvironmentWidget(ScriptedLoadableModuleWidget):
             checkbox.checked = installed
             checkbox.blockSignals(was_blocking)
 
-    def onInstallKwneuroClicked(self) -> None:
+    def onApplyEnvironmentChangesClicked(self) -> None:
         with slicer.util.tryWithErrorDisplay(
-            _("Failed to install / update kwneuro."), waitCursor=True,
+            _("Failed to apply KWNeuro environment changes."), waitCursor=True,
         ):
-            self.logic.ensure_kwneuro_installed()
-            self.refresh()
+            try:
+                desired_status = self._current_desired_extras_status()
+                self.logic.ensure_kwneuro_installed()
+                installed_status = self.logic.extras_status()
+
+                for name in EXTRAS_INSTALL_SPEC:
+                    if desired_status[name] and not installed_status.get(name, False):
+                        self.logic.install_extra(name)
+
+                for name in EXTRAS_INSTALL_SPEC:
+                    if not desired_status[name] and installed_status.get(name, False):
+                        self.logic.uninstall_extra(name)
+            finally:
+                self.refresh()
+
+    def onInstallKwneuroClicked(self) -> None:
+        """Backward-compatible alias for older tests or scripted callers."""
+        self.onApplyEnvironmentChangesClicked()
 
     def onVerifySetupClicked(self) -> None:
         passed, message = self.logic.verify_setup()
@@ -302,16 +323,19 @@ class KWNeuroEnvironmentWidget(ScriptedLoadableModuleWidget):
         else:
             logging.error("KWNeuro verify setup FAILED: %s", message)
 
-    def _onExtraToggled(self, name: str, checked: bool) -> None:
-        action_desc = f"install kwneuro[{name}]" if checked else f"uninstall kwneuro[{name}]"
-        with slicer.util.tryWithErrorDisplay(
-            _(f"Failed to {action_desc}."), waitCursor=True,
-        ):
-            if checked:
-                self.logic.install_extra(name)
+    def _onExtraDesiredStateChanged(self, name: str, checked: bool) -> None:
+        self._desired_extras_status[name] = bool(checked)
+
+    def _current_desired_extras_status(self) -> dict[str, bool]:
+        desired: dict[str, bool] = {}
+        for name in EXTRAS_INSTALL_SPEC:
+            checkbox = getattr(self.ui, f"extra_{name}_CheckBox", None)
+            if checkbox is None:
+                desired[name] = self._desired_extras_status.get(name, False)
             else:
-                self.logic.uninstall_extra(name)
-            self.refresh()
+                desired[name] = bool(checkbox.checked)
+        self._desired_extras_status = dict(desired)
+        return desired
 
 
 #

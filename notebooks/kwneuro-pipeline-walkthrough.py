@@ -39,7 +39,7 @@
 #
 # Confirm the bridge and kwneuro are both importable. If either fails,
 # open the **KWNeuro Environment** module in Slicer's UI and click
-# *Install / Update*.
+# *Apply environment changes*.
 
 # %%
 import kwneuro
@@ -96,8 +96,8 @@ print(f"Denoised: {slicer.mrmlScene.GetNodeByID(denoised_id).GetName()}")
 #
 # `KWNeuroBrainExtract` wraps HD-BET. This cell is intentionally
 # wrapped in a try/except so the notebook doesn't hard-fail on a
-# machine without the extra — click **KWNeuro Environment** and tick
-# the **hdbet** checkbox to install.
+# machine without the extra — open **KWNeuro Environment**, tick the
+# **hdbet** checkbox, and click **Apply environment changes** to install.
 
 # %%
 mask_node = None  # guaranteed bound, even if HD-BET fails hard

@@ -21,8 +21,9 @@ Public entry points:
 
 Plus :func:`ensure_extras_installed`, which probes the
 ``KWNeuroEnvironment`` install-status surface and raises a clear
-"open KWNeuroEnvironment and tick the <extra> checkbox" error if the
-module under the cursor needs an extra that is not installed.
+"open KWNeuroEnvironment, check the <extra> checkbox, and apply
+environment changes" error if the module under the cursor needs an
+extra that is not installed.
 """
 from __future__ import annotations
 
@@ -479,7 +480,8 @@ def ensure_extras_installed(names: list[str]) -> None:
     ``KWNeuroEnvironment.EXTRAS_INSTALL_SPEC``
     (``hdbet``/``noddi``/``tractseg``/``combat``/``antspynet``). The error message
     nudges the user at the KWNeuroEnvironment panel so they can fix
-    it with a checkbox click rather than manual pip.
+    it by selecting extras and applying the environment changes rather
+    than manual pip.
     """
     try:
         from KWNeuroEnvironment import KWNeuroEnvironmentLogic
@@ -498,7 +500,7 @@ def ensure_extras_installed(names: list[str]) -> None:
     msg = (
         f"This module needs the following kwneuro extras that are not "
         f"currently installed: {pretty}. Open the KWNeuroEnvironment "
-        f"module and tick the relevant checkbox(es) under 'Optional "
-        f"extras' to install."
+        f"module, check the relevant box(es) under 'Optional extras', "
+        f"and click 'Apply environment changes' to install."
     )
     raise RuntimeError(msg)

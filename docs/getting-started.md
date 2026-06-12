@@ -37,12 +37,13 @@ Navigate to the **KWNeuro** category in the module selector and open
   bundled with the extension and reports as such), an
   **Optional extras** groupbox with one checkbox per kwneuro extra
   (`hdbet`, `noddi`, `tractseg`, `combat`, `antspynet`), and the
-  **Install / Update** button. On first launch the kwneuro version
-  reads *(not installed)*; click *Install / Update* and pip fetches
-  the pinned `kwneuro==1.0.0` release. Ticking an extras checkbox installs
-  that extra; unticking uninstalls it. TractSeg is the only one that
-  needs special handling (`fury` is pruned to preserve Slicer's
-  bundled VTK); the panel does that for you automatically.
+  **Apply environment changes** button. On first launch the kwneuro
+  version reads *(not installed)*; choose the extras you want and click
+  *Apply environment changes*. The panel pip fetches the pinned
+  `kwneuro` release, installs checked extras, and uninstalls unchecked
+  extras that are currently present. TractSeg is the only one that
+  needs special handling (`fury` is pruned to preserve Slicer's bundled
+  VTK); the panel does that for you automatically.
 
 - **Verification.** Click **Verify setup**. The button's tooltip
   describes what gets checked (imports + a synthetic round-trip).

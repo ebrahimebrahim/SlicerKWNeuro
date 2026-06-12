@@ -75,10 +75,11 @@ once released, or a build-tree launcher during development — see
 **Typical diffusion flow** (matches the notebook at
 `notebooks/kwneuro-pipeline-walkthrough.py`):
 
-1. **KWNeuro Environment**: click *Install / Update* to install (or
-   refresh) the `kwneuro` library into Slicer's Python; tick any
-   optional extras you need. The `kwneuro_slicer_bridge` package
-   ships with the extension and needs no install.
+1. **KWNeuro Environment**: check any optional extras you need, then
+   click *Apply environment changes* to install (or refresh) the
+   `kwneuro` library and apply the selected extras. The
+   `kwneuro_slicer_bridge` package ships with the extension and needs
+   no install.
 2. **KWNeuro Importer**: either load your own DWI (pick the NIfTI,
    `.bval`, `.bvec` files + a node name) or click a DWI sample-data
    button.
@@ -153,12 +154,13 @@ build-tree's module paths — the KWNeuro modules appear under
 
 ### 3. Install `kwneuro` + any extras
 
-Open **KWNeuro Environment** and click **Install / Update**. That
-pip-installs the pinned `kwneuro==1.0.0` release into Slicer's
-Python. Then tick any optional-extra checkboxes you want
-(`hdbet`, `noddi`, `tractseg`, `combat`, `antspynet`); the panel drives
-`slicer.packaging.pip_install` for each, including the
-`skip_packages=["fury"]` dance TractSeg needs.
+Open **KWNeuro Environment**, tick any optional-extra checkboxes you
+want (`hdbet`, `noddi`, `tractseg`, `combat`, `antspynet`), then click
+**Apply environment changes**. That pip-installs the pinned
+`kwneuro` release into Slicer's Python and applies the selected extra
+state; the panel drives `slicer.packaging.pip_install` for each newly
+checked extra, including the `skip_packages=["fury"]` dance TractSeg
+needs.
 
 The `kwneuro_slicer_bridge` package ships bundled with the extension
 (in the same `qt-scripted-modules/` directory as the modules), so

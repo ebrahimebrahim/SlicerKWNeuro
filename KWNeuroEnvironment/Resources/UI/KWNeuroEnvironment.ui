@@ -102,10 +102,10 @@
       <item>
        <widget class="QPushButton" name="installKwneuroButton">
         <property name="text">
-         <string>Install / Update kwneuro</string>
+         <string>Apply environment changes</string>
         </property>
         <property name="toolTip">
-         <string>pip-installs the pinned kwneuro==1.0.0 release into Slicer's bundled Python. The kwneuro_slicer_bridge package is shipped with this extension and needs no install — it is reachable from any Slicer session that has the extension loaded.</string>
+         <string>Installs or updates the pinned kwneuro release in Slicer's bundled Python, then installs checked optional extras and uninstalls unchecked optional extras. The kwneuro_slicer_bridge package is shipped with this extension and needs no install.</string>
         </property>
        </widget>
       </item>
@@ -124,7 +124,7 @@
          <string>Verify setup</string>
         </property>
         <property name="toolTip">
-         <string>Imports kwneuro and kwneuro_slicer_bridge, then pushes a small synthetic 3D volume through InSceneVolumeResource and verifies its array and affine round-trip correctly. A failure here means one of those three steps did not work — typically because kwneuro or the bridge is not installed, or an import failed; re-run Install / Update above or check the console for the specific error.</string>
+         <string>Imports kwneuro and kwneuro_slicer_bridge, then pushes a small synthetic 3D volume through InSceneVolumeResource and verifies its array and affine round-trip correctly. A failure here means one of those three steps did not work — typically because kwneuro or the bridge is not installed, or an import failed; click Apply environment changes above or check the console for the specific error.</string>
         </property>
        </widget>
       </item>

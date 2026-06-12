@@ -3,9 +3,9 @@
 This walkthrough uses the GUI modules for a single-subject structural
 and diffusion workflow.
 
-1. Open **KWNeuro Environment** and install the extras you need:
-   `hdbet` for brain extraction and `antspynet` for Deep Atropos or
-   DKT parcellation.
+1. Open **KWNeuro Environment**, check the extras you need, and click
+   **Apply environment changes**: `hdbet` for brain extraction and
+   `antspynet` for Deep Atropos or DKT parcellation.
 2. Open **KWNeuro Importer**. Load a structural NIfTI and a DWI
    NIfTI + `.bval` + `.bvec`, or click **Load ds000221 T1 + DWI** to
    fetch the OpenNeuro multimodal sample.

@@ -1,4 +1,3 @@
-- The optional extras checkboxes shoudl not trigger install when you touch them, they should instead build up a set of changes which can then be implemented all at once by a button press.
 - Once https://github.com/KitwareMedical/kwneuro/pull/139 is merged: Study it and see what features need to be added to the extension. Import structural volume from disk make sense to add?? Definitely at least a bridge thing for structural volumes though. ANd then modules for the various things that have been added for structural volume processing?
 - Add to core slicer extn manager a "install from repo" utility so we can point to the KWNeuro extn with it. Rather than putting it on extn index.
 - Markdown in tooltips does not work... it seems claude generated a lot of it. Also: confirm the truthfulness of what's reported in all tooltips

@@ -24,9 +24,10 @@ jupytext --to ipynb <file>.py
 ## Prerequisites
 
 1. A Slicer install with the KWNeuro extension loaded.
-2. The `KWNeuroEnvironment` *Install / Update* button has been
-   clicked at least once, so `kwneuro` and `kwneuro_slicer_bridge`
-   are installed in Slicer's Python.
+2. The `KWNeuroEnvironment` *Apply environment changes* button has
+   been clicked at least once, so `kwneuro` is installed in Slicer's
+   Python. The `kwneuro_slicer_bridge` package ships with the
+   extension.
 3. SlicerJupyter installed. Open its **JupyterKernel** module and
    start the kernel / server.
 4. Run `jupyter notebook` from the shell; the `slicer` kernel will
