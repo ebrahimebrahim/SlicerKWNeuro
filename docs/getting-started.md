@@ -19,10 +19,10 @@ Slicer with `--additional-module-paths` pointed at each module
 directory (or at the build-tree parent that contains them all).
 The simplest path during development is to use the
 build-tree-generated `SlicerWithKWNeuro` launcher documented in the
-repo `README.md`:
+repo `README.md`. With `BUILD_DIR` set to that extension build tree:
 
 ```sh
-/tmp/kwneuro-extn-build/SlicerWithKWNeuro
+"${BUILD_DIR}/SlicerWithKWNeuro"
 ```
 
 Alternatively, add the paths via *Edit → Application Settings →

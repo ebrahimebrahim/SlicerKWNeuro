@@ -125,17 +125,18 @@ header.
 ### 1. Configure + build
 
 The extension is standard Slicer CMake — no scripted-module Python
-install required up front. Point CMake at your Slicer build tree and
-run the build:
+install required up front. From the repository root, point CMake at
+your Slicer build tree and run the build. Set `BUILD_DIR` to any
+writable directory you want to use for the extension build tree:
 
 ```sh
-mkdir -p /tmp/kwneuro-extn-build && cd /tmp/kwneuro-extn-build
-cmake -DSlicer_DIR=/path/to/Slicer-build $OLDPWD
-cmake --build .
+BUILD_DIR=/path/to/KWNeuro-build
+cmake -S . -B "$BUILD_DIR" -DSlicer_DIR=/path/to/Slicer-build
+cmake --build "$BUILD_DIR"
 ```
 
 Substitute your own Slicer build path for `/path/to/Slicer-build`.
-Re-run `cmake --build .` after editing any scripted module or any
+Re-run `cmake --build "$BUILD_DIR"` after editing any scripted module or any
 file inside `kwneuro_slicer_bridge/` (the bridge goes through the
 same per-file copy pipeline as the modules — incremental builds
 re-copy only the changed files).
@@ -143,7 +144,7 @@ re-copy only the changed files).
 ### 2. Launch Slicer with the extension
 
 ```sh
-/tmp/kwneuro-extn-build/SlicerWithKWNeuro
+"${BUILD_DIR}/SlicerWithKWNeuro"
 ```
 
 This is a CMake-generated launcher that points Slicer at the
@@ -177,16 +178,18 @@ bundled Python.
 ### 4. Run the test suite
 
 ```sh
-cd /tmp/kwneuro-extn-build
-ctest -j$(nproc) --output-on-failure --no-tests=error
+ctest --test-dir "$BUILD_DIR" \
+  -j$(nproc) \
+  --output-on-failure \
+  --no-tests=error
 ```
 
 Expected: all tests pass in a few minutes. List the exact count with
-`ctest -N`; it changes as scripted modules are added. Almost every
-module's tests either use synthetic data or mock the optional
-dependency (HD-BET, AMICO, TractSeg, ANTsPyNet). The one exception is
-`py_test_kwneuroharmonize`, which fails rather than skips without
-the `combat` extra.
+`ctest --test-dir "$BUILD_DIR" -N`; it changes as scripted modules
+are added. Almost every module's tests either use synthetic data or
+mock the optional dependency (HD-BET, AMICO, TractSeg, ANTsPyNet).
+The one exception is `py_test_kwneuroharmonize`, which fails rather
+than skips without the `combat` extra.
 
 Two tests *skip cleanly* when the Sherbrooke 3-shell DWI hasn't been
 cached locally (see the note below): `test_from_nifti_path_preserves_4d_shape`
@@ -196,7 +199,10 @@ covered by a mocked test that doesn't require the data.
 ### Run one test by name
 
 ```sh
-ctest -R py_test_kwneurodti --no-tests=error --output-on-failure
+ctest --test-dir "$BUILD_DIR" \
+  -R py_test_kwneurodti \
+  --no-tests=error \
+  --output-on-failure
 ```
 
 `--no-tests=error` is important: without it, a typo'd regex matching
@@ -204,7 +210,7 @@ zero tests prints "No tests were found!!!" but exits 0 — a silently-
 passing typo. List available tests first:
 
 ```sh
-ctest -N
+ctest --test-dir "$BUILD_DIR" -N
 ```
 
 ### Sample-data prerequisite
