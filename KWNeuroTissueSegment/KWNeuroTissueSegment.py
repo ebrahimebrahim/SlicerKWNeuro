@@ -2,8 +2,15 @@
 from __future__ import annotations
 
 import logging
+import os
+import subprocess
+import sys
+import tempfile
+import textwrap
+from pathlib import Path
 from typing import Any
 
+import numpy as np
 import slicer
 from slicer.i18n import tr as _
 from slicer.i18n import translate
@@ -35,6 +42,29 @@ class KWNeuroTissueSegment(ScriptedLoadableModule):
 class KWNeuroTissueSegmentLogic(ScriptedLoadableModuleLogic):
     SUPPORTED_METHODS = ("atropos", "deep_atropos")
 
+    _DEEP_ATROPOS_SUBPROCESS_CODE = r"""
+from __future__ import annotations
+
+import sys
+from pathlib import Path
+
+from kwneuro.io import NiftiVolumeResource
+from kwneuro.structural import StructuralImage
+
+
+def main() -> int:
+    input_path = Path(sys.argv[1])
+    output_path = Path(sys.argv[2])
+    structural = StructuralImage(volume=NiftiVolumeResource(input_path))
+    labels = structural.segment_tissues(method="deep_atropos")
+    NiftiVolumeResource.save(labels, output_path)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
+"""
+
     def __init__(self) -> None:
         ScriptedLoadableModuleLogic.__init__(self)
 
@@ -62,16 +92,105 @@ class KWNeuroTissueSegmentLogic(ScriptedLoadableModuleLogic):
 
         structural_name = structural_node.GetName() or "structural"
         structural = InSceneStructuralImage.from_node(structural_node).to_in_memory()
-        mask = (
-            InSceneVolumeResource.from_node(mask_node).to_in_memory()
-            if mask_node is not None else None
-        )
+        mask = None
+        if method == "atropos" and mask_node is not None:
+            mask = InSceneVolumeResource.from_node(mask_node).to_in_memory()
+            self._validate_mask_matches_structural(structural, mask)
         return structural, mask, structural_name, method
 
     def run_segmentation(self, structural: Any, mask: Any, method: str) -> Any:
         """Run structural tissue segmentation. **Thread-safe.**"""
         logging.info("KWNeuroTissueSegment: running %s", method)
+        if method == "deep_atropos":
+            return self._run_deep_atropos_subprocess(structural)
         return structural.segment_tissues(mask=mask, method=method)
+
+    @staticmethod
+    def _validate_mask_matches_structural(structural: Any, mask: Any) -> None:
+        structural_volume = structural.volume
+        structural_shape = structural_volume.get_array().shape
+        mask_array = mask.get_array()
+        if mask_array.shape != structural_shape:
+            msg = (
+                f"Mask shape {mask_array.shape} does not match structural "
+                f"image shape {structural_shape}."
+            )
+            raise ValueError(msg)
+
+        if not np.allclose(
+            mask.get_affine(),
+            structural_volume.get_affine(),
+            rtol=1e-4,
+            atol=1e-4,
+        ):
+            msg = "Mask geometry does not match the structural image geometry."
+            raise ValueError(msg)
+
+        if not np.any(mask_array > 0):
+            msg = "Mask is empty; Atropos requires at least one foreground voxel."
+            raise ValueError(msg)
+
+    def _run_deep_atropos_subprocess(self, structural: Any) -> Any:
+        """Run ANTsPyNet Deep Atropos outside SlicerApp.
+
+        TensorFlow can segfault while importing inside SlicerApp after
+        Slicer's Qt/VTK/native modules are loaded. The same ANTsPyNet
+        import is stable in plain PythonSlicer, so isolate this method in
+        a child process and shuttle NIfTI files across the boundary.
+        """
+        from kwneuro.io import NiftiVolumeResource
+
+        python_slicer = Path(sys.executable)
+        if not python_slicer.exists():
+            msg = f"Could not locate PythonSlicer executable at {python_slicer!s}."
+            raise RuntimeError(msg)
+
+        with tempfile.TemporaryDirectory(prefix="kwneuro_deep_atropos_") as tmp:
+            tmpdir = Path(tmp)
+            input_path = tmpdir / "input_t1.nii.gz"
+            output_path = tmpdir / "deep_atropos_labels.nii.gz"
+
+            loaded = structural.load()
+            NiftiVolumeResource.save(loaded.volume, input_path)
+
+            env = dict(os.environ)
+            env["MPLCONFIGDIR"] = str(tmpdir / "matplotlib")
+
+            result = subprocess.run(
+                [
+                    str(python_slicer),
+                    "-c",
+                    textwrap.dedent(self._DEEP_ATROPOS_SUBPROCESS_CODE),
+                    str(input_path),
+                    str(output_path),
+                ],
+                capture_output=True,
+                text=True,
+                env=env,
+                check=False,
+            )
+            if result.returncode != 0:
+                stdout = result.stdout.strip()
+                stderr = result.stderr.strip()
+                details = "\n".join(
+                    part for part in (stdout, stderr) if part
+                )
+                if len(details) > 4000:
+                    details = details[-4000:]
+                msg = (
+                    "Deep Atropos failed in the isolated PythonSlicer "
+                    f"process with exit code {result.returncode}."
+                )
+                if details:
+                    msg = f"{msg}\n\n{details}"
+                raise RuntimeError(msg)
+            if not output_path.exists():
+                msg = (
+                    "Deep Atropos completed without creating the expected "
+                    f"output file: {output_path!s}"
+                )
+                raise RuntimeError(msg)
+            return NiftiVolumeResource(output_path).load()
 
     def publish_to_scene(self, labels: Any, base_name: str, method: str) -> str:
         """Publish tissue labels as a labelmap. **Main thread only.**"""
