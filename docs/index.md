@@ -32,6 +32,7 @@ processing toolkit into Slicer. Ships:
 getting-started
 bridge-reference
 Tutorials <tutorials/index>
+Development <development>
 API Reference <autoapi/index>
 ```
 
@@ -46,6 +47,9 @@ API Reference <autoapi/index>
   of end-to-end diffusion and structural workflows.
   A runnable SlicerJupyter notebook lives in the repo at
   `notebooks/kwneuro-pipeline-walkthrough.py`.
+- **{doc}`Development <development>`** — configure a local build,
+  launch Slicer, prepare optional dependencies, run tests, and build
+  this documentation.
 - **{doc}`API Reference <autoapi/index>`** — auto-generated reference
   for every bridge class.
 

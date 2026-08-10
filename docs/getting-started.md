@@ -1,8 +1,8 @@
 # Getting started
 
-This page walks through installing the KWNeuro Slicer extension for
-development, opening the environment panel, and doing a round-trip of
-a volume through `InSceneVolumeResource` from Slicer's Python
+This page walks through making the KWNeuro extension available in
+Slicer, opening the environment panel, and doing a round-trip of a
+volume through `InSceneVolumeResource` from Slicer's Python
 interactor.
 
 ## 1. Build or install Slicer
@@ -11,22 +11,21 @@ The extension targets Slicer with Python 3.12 (a recent nightly or
 5.11-class superbuild). A fresh build or a pre-built installer both
 work.
 
-## 2. Clone the extension and point Slicer at it
+## 2. Install or build the extension
 
-The extension currently lives inside the `kwneuro` working tree at
-`kwneuro/slicer-extn/`. Until it lands in the Extension Index, run
-Slicer with `--additional-module-paths` pointed at each module
-directory (or at the build-tree parent that contains them all).
-The simplest path during development is to use the
-build-tree-generated `SlicerWithKWNeuro` launcher documented in the
-repo `README.md`. With `BUILD_DIR` set to that extension build tree:
+Install a packaged release from this repository, or build the
+extension from source. For a source build, follow the complete
+{doc}`development` guide to configure the extension and create the
+`SlicerWithKWNeuro` launcher. With `BUILD_DIR` set to that extension
+build tree:
 
 ```sh
 "${BUILD_DIR}/SlicerWithKWNeuro"
 ```
 
-Alternatively, add the paths via *Edit → Application Settings →
-Modules → Additional module paths* in the Slicer GUI and restart.
+Alternatively, point Slicer at the built module directories via
+*Edit → Application Settings → Modules → Additional module paths*
+and restart.
 
 ## 3. Open the KWNeuro Environment module
 

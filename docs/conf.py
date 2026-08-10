@@ -25,7 +25,8 @@ extensions = [
 # environment.
 autodoc_mock_imports = ["slicer", "vtk", "vtkmodules", "vtk.util", "vtk.util.numpy_support"]
 
-autoapi_dirs = ["../kwneuro_slicer_bridge/src/kwneuro_slicer_bridge"]
+autoapi_dirs = ["../kwneuro_slicer_bridge/kwneuro_slicer_bridge"]
+autoapi_python_use_implicit_namespaces = True
 autoapi_options = [
     "members",
     "undoc-members",
@@ -60,4 +61,7 @@ nitpick_ignore_regex = [
     (r"py:.*", r"vtk\..*"),
     (r"py:.*", r"numpy\.typing\.NDArray"),
     (r"py:.*", r"kwneuro\..*"),
+    (r"py:class", r"T"),
+    (r"py:class", r"TqdmToProgressDialog|StdStreamsToProgressDialog"),
+    (r"py:data", r"_TQDM_REBINDINGS"),
 ]

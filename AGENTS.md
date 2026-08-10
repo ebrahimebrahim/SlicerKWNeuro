@@ -5,8 +5,54 @@ extension. Consolidates the architectural decisions, coordinate-system
 traps, and review-driven test patterns that aren't obvious from the
 code alone.
 
-The user-facing docs are in `README.md` and `docs/`. This file is
-for contributors.
+The project documentation is in `README.md` and `docs/`, including
+the contributor workflow in `docs/development.md`. This file records
+implementation constraints and maintenance notes that should not be
+lost in user-facing prose.
+
+## Contributor workflow
+
+### Rebuild before launching
+
+This is a standard Slicer CMake extension. Configure it against a
+Slicer build tree, then re-run `cmake --build "$BUILD_DIR"` after
+editing a scripted module or anything in `kwneuro_slicer_bridge/`.
+Both modules and bridge files are copied into the extension build
+tree; launching without rebuilding can silently exercise stale code.
+Use the generated `${BUILD_DIR}/SlicerWithKWNeuro` launcher so all
+build-tree module paths are present.
+
+The bridge is bundled and must not be pip-installed. Install the
+external `kwneuro` package and optional extras through **KWNeuro
+Environment**. Those installs persist in Slicer's Python environment.
+
+### Test invocations must reject an empty match
+
+Run the suite with CTest against the extension build tree. Always use
+`--no-tests=error`, including with `-R`: without it, a misspelled
+regular expression can match zero tests while CTest exits
+successfully. Use `ctest --test-dir "$BUILD_DIR" -N` to list the test
+names before narrowing a run.
+
+The `combat` extra is required for the full suite.
+`py_test_kwneuroharmonize` deliberately fails instead of skipping
+when `neuroCombat` is unavailable. In contrast,
+`test_from_nifti_path_preserves_4d_shape` and
+`test_load_sherbrooke_if_cached` skip when the Sherbrooke 3-shell DWI
+is absent. Populate DIPY's cache through **KWNeuro Importer** or with
+`dipy.data.fetch_sherbrooke_3shell()` when those data-backed tests are
+needed.
+
+### Documentation builds outside Slicer
+
+The Sphinx build uses mocked Slicer/VTK imports and AutoAPI reads the
+bridge source directly from
+`kwneuro_slicer_bridge/kwneuro_slicer_bridge/`; do not add a bridge
+install step to the docs workflow. Build with nitpicky mode enabled:
+
+```sh
+python -m sphinx -n -T docs docs/_build/html
+```
 
 ## Architectural decisions
 
@@ -318,6 +364,12 @@ the compatible PyTorch wheel.
 
 ## Known design questions / follow-ups
 
+### Distribution and CI
+
+Extension Index submission and project CI remain follow-up work.
+Keep source-build instructions usable and do not assume CI covers a
+test unless a repository workflow actually runs it.
+
 ### CSD `flip_bvecs_x` default
 
 `kwneuro.csd.compute_csd_peaks` defaults `flip_bvecs_x=True`, which
@@ -365,10 +417,10 @@ nearly as slow on CPU and probably deserves the same treatment.
 ## Repository layout
 
 ```
-slicer-extn/
+SlicerKWNeuro/
 ├── CMakeLists.txt                  # extension metadata, add_subdirectory() calls
 ├── AGENTS.md                       # this file
-├── README.md                       # user-facing docs
+├── README.md                       # user-facing overview
 ├── KWNeuroEnvironment/             # install-status panel + bridge tests
 ├── KWNeuroImporter/                # DWI loader + Sherbrooke fetch
 ├── KWNeuroBrainExtract/            # HD-BET (extra: hdbet)
@@ -385,7 +437,7 @@ slicer-extn/
 ├── KWNeuroTemplate/                # ANTs template building
 ├── KWNeuroHarmonize/               # ComBat (extra: combat)
 ├── kwneuro_slicer_bridge/          # bundled bridge package (built like a module)
-├── docs/                           # Sphinx site (user-facing)
+├── docs/                           # Sphinx site + contributor workflow
 └── notebooks/                      # SlicerJupyter walkthroughs
 ```
 
