@@ -110,6 +110,22 @@ release).
 Scripted modules import with `from kwneuro_slicer_bridge import ...`,
 the Python interactor and SlicerJupyter notebooks do the same.
 
+### Module icons are source symlinks to one shared asset
+
+`shared-resources/kwn-icon.png` is the canonical icon for every
+scripted module. Slicer's `ScriptedLoadableModule` base class looks
+for `Resources/Icons/<ModuleName>.png`, so each module keeps that path
+as a relative symlink to the shared PNG. The CTK scripted-module build
+uses `cmake -E copy`, which dereferences the link: build-tree and
+packaged icons are regular PNG files and do not depend on symlink
+support at runtime.
+
+The source checkout and extension build therefore require a platform
+that preserves Git symlinks (Linux is the supported build platform),
+but the resulting scripted extension package does not. When adding a
+module, create its expected icon path as the same relative symlink;
+do not add another PNG copy.
+
 ### Scene-backed domain classes subclass kwneuro domain classes
 
 So anything that takes a `kwneuro.Dwi`, `kwneuro.Dti`, or
@@ -437,6 +453,7 @@ SlicerKWNeuro/
 ├── KWNeuroTemplate/                # ANTs template building
 ├── KWNeuroHarmonize/               # ComBat (extra: combat)
 ├── kwneuro_slicer_bridge/          # bundled bridge package (built like a module)
+├── shared-resources/               # canonical icon shared by all modules
 ├── docs/                           # Sphinx site + contributor workflow
 └── notebooks/                      # SlicerJupyter walkthroughs
 ```
@@ -448,7 +465,7 @@ KWNeuro<Name>/
 ├── CMakeLists.txt
 ├── KWNeuro<Name>.py                # Module + Logic + Widget + Test
 ├── Resources/
-│   ├── Icons/KWNeuro<Name>.png
+│   ├── Icons/KWNeuro<Name>.png      # symlink to shared-resources/kwn-icon.png
 │   ├── UI/KWNeuro<Name>.ui
 │   └── requirements.txt            # mostly empty; deps come via the bridge
 └── Testing/
